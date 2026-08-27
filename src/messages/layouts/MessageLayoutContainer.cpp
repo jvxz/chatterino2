@@ -29,6 +29,16 @@ using namespace chatterino;
 constexpr QMargins MARGIN{8, 4, 8, 4};
 constexpr qreal COMPACT_EMOTES_OFFSET = 4;
 
+// Lines advance by exactly the font's height(), and the macOS system fonts
+// report leading() == 0, so wrapped lines end up at a line-height ratio of 1.0
+// while separate messages get MARGIN's 4px top and bottom. Add leading back so
+// the two are closer to the ~1.2 that native text uses.
+#ifdef Q_OS_MACOS
+constexpr qreal LINE_LEADING_RATIO = 0.2;
+#else
+constexpr qreal LINE_LEADING_RATIO = 0.0;
+#endif
+
 int maxUncollapsedLines()
 {
     return getSettings()->collpseMessagesMinLines.getValue();
@@ -202,12 +212,17 @@ void MessageLayoutContainer::breakLine()
         this->lines_.back().endIndex = this->lineStart_;
         this->lines_.back().endCharIndex = this->charIndex_;
     }
+
+    // The selection/hover rect and the y advance must use the same value, or
+    // selecting across lines leaves unhighlighted gaps.
+    const qreal lineAdvance = this->lineHeight_ * (1.0 + LINE_LEADING_RATIO);
+
     this->lines_.push_back({
         .startIndex = this->lineStart_,
         .endIndex = 0,
         .startCharIndex = this->charIndex_,
         .endCharIndex = 0,
-        .rect = QRectF(-100000, this->currentY_, 200000, this->lineHeight_),
+        .rect = QRectF(-100000, this->currentY_, 200000, lineAdvance),
     });
 
     for (auto i = this->lineStart_; i < this->elements_.size(); i++)
@@ -226,7 +241,7 @@ void MessageLayoutContainer::breakLine()
     }
 
     this->currentX_ = 0;
-    this->currentY_ += this->lineHeight_;
+    this->currentY_ += lineAdvance;
     this->height_ = this->currentY_ + int(MARGIN.bottom() * this->scale_);
     this->lineHeight_ = 0;
     this->line_++;

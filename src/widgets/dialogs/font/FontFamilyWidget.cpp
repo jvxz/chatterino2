@@ -13,11 +13,23 @@ namespace chatterino {
 
 namespace {
 
+/// Shown in place of systemFamily(). Chosen not to collide with the legacy
+/// "System" family that exists on Windows.
+const QString SYSTEM_LABEL = QStringLiteral("System font");
+
+/// The family Qt uses for the OS UI font. On macOS this is a private family
+/// (".AppleSystemUIFont"), so getFontFamilies() would otherwise drop it.
+QString systemFamily()
+{
+    return QFontDatabase::systemFont(QFontDatabase::GeneralFont).family();
+}
+
 /// Gets a list of available font families available on this system
 QStringList getFontFamilies()
 {
     QStringList families = QFontDatabase::families();
     families.removeIf(QFontDatabase::isPrivateFamily);
+    families.prepend(SYSTEM_LABEL);
     return families;
 }
 
@@ -67,7 +79,8 @@ FontFamilyWidget::FontFamilyWidget(const QFont &startFont, QWidget *parent)
 
 void FontFamilyWidget::setSelected(const QString &family)
 {
-    qsizetype row = this->model->stringList().indexOf(family);
+    qsizetype row = this->model->stringList().indexOf(
+        family == systemFamily() ? SYSTEM_LABEL : family);
     if (row >= 0)
     {
         QModelIndex modelIndex = this->model->index(static_cast<int>(row));
@@ -87,7 +100,8 @@ QString FontFamilyWidget::getSelected() const
     }
 
     QModelIndex modelIndex = this->proxy->mapToSource(proxyIndex);
-    return this->model->data(modelIndex).toString();
+    QString family = this->model->data(modelIndex).toString();
+    return family == SYSTEM_LABEL ? systemFamily() : family;
 }
 
 }  // namespace chatterino

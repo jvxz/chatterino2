@@ -56,6 +56,27 @@ int getUsernameBoldness()
     return result;
 }
 
+// macOS reports 72 logical DPI where Windows/Linux report 96, so a given point
+// size renders at 0.75x here. The hardcoded UI sizes below were tuned against
+// 96 DPI; the chat sizes scale off chatFontSize and are already compensated.
+#ifdef Q_OS_MACOS
+constexpr float UI_FONT_SCALE = 96.F / 72.F;
+
+// Tracking added to every font, as a percentage of the normal advance.
+// 100 = the font's own metrics (what Qt does by default); raise to loosen.
+constexpr qreal LETTER_SPACING_PERCENT = 105;
+
+// Base sizes for UI chrome (tabs, split headers, labels), before UI_FONT_SCALE.
+// Upstream uses 9/8 everywhere; the chrome reads small next to the chat text
+// on macOS, so nudge it up here without touching the other platforms.
+constexpr float UI_FONT_SIZE = 10;
+constexpr float TINY_FONT_SIZE = 8;
+#else
+constexpr float UI_FONT_SCALE = 1.F;
+constexpr float UI_FONT_SIZE = 9;
+constexpr float TINY_FONT_SIZE = 8;
+#endif
+
 float fontSize(FontStyle style)
 {
     auto chatSize = [] {
@@ -78,16 +99,16 @@ float fontSize(FontStyle style)
             return 1.4F * chatSize();
 
         case FontStyle::Tiny:
-            return 8;
+            return TINY_FONT_SIZE * UI_FONT_SCALE;
         case FontStyle::UiMedium:
         case FontStyle::UiMediumBold:
         case FontStyle::UiTabs:
         case FontStyle::EndType:
-            return 9;
+            return UI_FONT_SIZE * UI_FONT_SCALE;
     }
 
     assert(false);
-    return 9;
+    return UI_FONT_SIZE * UI_FONT_SCALE;
 }
 
 int fontWeight(FontStyle style)
@@ -255,6 +276,14 @@ Fonts::FontData Fonts::createFontData(FontStyle type, float scale)
         default:
             break;
     }
+
+        // macOS's system font ships a tracking table that AppKit applies at small
+        // point sizes, so native text is spaced slightly looser than the raw font
+        // metrics. Qt renders through CoreText but doesn't apply that table, which
+        // makes text here look tighter than in native apps.
+#ifdef Q_OS_MACOS
+    font.setLetterSpacing(QFont::PercentageSpacing, LETTER_SPACING_PERCENT);
+#endif
 
     // If the requested font is not available, trigger
     // automatic substitution by the closest font
