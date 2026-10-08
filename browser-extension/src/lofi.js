@@ -23,6 +23,10 @@
     { prefix: 't-', re: /^https:\/\/(?:www\.)?twitch\.tv\/embed\/(\w+)\/chat/ },
   ];
 
+  // The site's own chat is unloaded while Chatterino covers it, so it stops
+  // loading messages and emotes nobody sees. Its URL is kept on the frame.
+  const BLANK = 'about:blank';
+
   let lastOverlay = null;
   let lastPovs = null;
 
@@ -44,8 +48,20 @@
     return povs;
   }
 
+  function frameSrc(frame) {
+    return frame.src === BLANK
+      ? frame.dataset.chatterinoSrc ?? BLANK
+      : frame.src;
+  }
+
+  function unloadChat(frame) {
+    if (frame.src === BLANK) return;
+    frame.dataset.chatterinoSrc = frame.src;
+    frame.src = BLANK;
+  }
+
   function povFromFrame(frame) {
-    const src = frame.src;
+    const src = frameSrc(frame);
     for (const { prefix, re } of chatFrameMatchers) {
       const match = src.match(re);
       if (match) return prefix + match[1].toLowerCase();
@@ -54,7 +70,7 @@
   }
 
   /**
-   * @returns {{ pov: string, rect: DOMRect } | null}
+   * @returns {{ pov: string, frame: HTMLIFrameElement, rect: DOMRect } | null}
    *   the largest visible chat embed
    */
   function findShownChat() {
@@ -67,7 +83,7 @@
       const rect = frame.getBoundingClientRect();
       const area = rect.width * rect.height;
       if (area > shownArea) {
-        shown = { pov, rect };
+        shown = { pov, frame, rect };
         shownArea = area;
       }
     }
@@ -134,6 +150,7 @@
       lastOverlay = overlayKey;
       post(overlay);
     }
+    unloadChat(shown.frame);
   }
 
   const timer = setInterval(update, POLL_MS);
