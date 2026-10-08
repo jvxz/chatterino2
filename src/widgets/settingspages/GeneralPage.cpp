@@ -1002,6 +1002,22 @@ void GeneralPage::initLayout(GeneralPageView &layout)
             ->addTo(layout, form);
     }
 
+    layout.addSubtitle("lofi-nopixel Multi-POV");
+    layout.addDescription(
+        "Keeps a \"Multi-POV\" tab showing the chats you have open on "
+        "lofi-nopixel.com. Kick POVs show the Twitch chat with the same name.");
+    SettingWidget::checkbox("Sync chats from lofi-nopixel Multi-POV",
+                            s.multiPovSyncEnabled)
+        ->addTo(layout);
+    SettingWidget::checkbox("Open the Multi-POV tab in the main window",
+                            s.multiPovSyncInMainWindow)
+        ->setTooltip("When off, the tab opens in its own window. Only applies "
+                     "when the tab is created.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Bring the Multi-POV window to front on changes",
+                            s.multiPovSyncRaiseWindow)
+        ->addTo(layout);
+
 #ifndef Q_OS_WIN
     {
         auto *note = layout.addDescription(

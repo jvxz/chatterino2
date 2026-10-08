@@ -870,6 +870,12 @@ public:
     // Advanced
     QStringSetting additionalExtensionIDs{"/misc/additionalExtensionIDs", ""};
 
+    BoolSetting multiPovSyncEnabled{"/misc/extension/multiPov/enabled", true};
+    BoolSetting multiPovSyncInMainWindow{
+        "/misc/extension/multiPov/inMainWindow", false};
+    BoolSetting multiPovSyncRaiseWindow{"/misc/extension/multiPov/raiseWindow",
+                                        false};
+
 #ifndef Q_OS_WIN
     QStringSetting customNativeMessagingManifestPath{
         "/misc/extension/customManifestPath",

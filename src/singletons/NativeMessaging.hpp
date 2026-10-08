@@ -75,6 +75,7 @@ private:
         void handleSelect(const QJsonObject &root);
         void handleDetach(const QJsonObject &root);
         void handleSync(const QJsonObject &root);
+        void handleMultiPov(const QJsonObject &root);
 
         NativeMessagingServer &parent_;
     };

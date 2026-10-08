@@ -10,6 +10,7 @@
 #include "common/QLogging.hpp"
 #include "debug/AssertInGuiThread.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "singletons/MultiPovSync.hpp"
 #include "singletons/Paths.hpp"
 #include "singletons/Settings.hpp"
 #include "util/IpcQueue.hpp"
@@ -420,6 +421,11 @@ void NativeMessagingServer::ReceiverThread::handleMessage(
         this->handleSync(root);
         return;
     }
+    if (action == "multipov")
+    {
+        this->handleMultiPov(root);
+        return;
+    }
 
     qCDebug(chatterinoNativeMessage) << "NM unknown action" << action;
 }
@@ -512,6 +518,22 @@ void NativeMessagingServer::ReceiverThread::handleSync(const QJsonObject &root)
     postToThread([&parent = this->parent_,
                   twitch = root["twitchChannels"_L1].toArray()] {
         parent.syncChannels(twitch);
+    });
+}
+
+void NativeMessagingServer::ReceiverThread::handleMultiPov(
+    const QJsonObject &root)
+{
+    // Structure:
+    // { action: 'multipov', povs: string[] }
+    // povs are lofi-nopixel.com slugs ("t-name" or "k-name") of the POVs that
+    // have their chat open.
+    postToThread([channels = multipov::twitchChannelsFromPovs(
+                      root["povs"_L1].toArray())] {
+        if (getSettings()->multiPovSyncEnabled)
+        {
+            multipov::syncSplits(channels);
+        }
     });
 }
 

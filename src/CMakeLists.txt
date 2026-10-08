@@ -531,6 +531,8 @@ set(SOURCE_FILES
         singletons/ImageUploader.hpp
         singletons/Logging.cpp
         singletons/Logging.hpp
+        singletons/MultiPovSync.cpp
+        singletons/MultiPovSync.hpp
         singletons/NativeMessaging.cpp
         singletons/NativeMessaging.hpp
         singletons/Paths.cpp

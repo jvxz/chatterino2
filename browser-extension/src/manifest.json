@@ -27,6 +27,11 @@
       "run_at": "document_end",
       "matches": ["https://www.twitch.tv/*"],
       "js": ["inject.js"]
+    },
+    {
+      "run_at": "document_idle",
+      "matches": ["https://lofi-nopixel.com/*"],
+      "js": ["lofi.js"]
     }
   ]
 }

@@ -357,6 +357,19 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
     case 'detach':
       tryDetach(sender.tab.windowId);
       break;
+    case 'multipov':
+      // only the tab you're looking at decides which chats are shown
+      if (!sender.tab.active) return;
+
+      chrome.windows.get(sender.tab.windowId, {}, window => {
+        if (!window.focused) return;
+
+        const port = getPort();
+        if (port) {
+          port.postMessage({ action: 'multipov', povs: message.povs ?? [] });
+        }
+      });
+      break;
   }
 });
 
