@@ -125,3 +125,6 @@ aqtinstall.log
 
 # sccache (CI)
 .sccache
+
+# Top-level macOS build wrapper
+!/Makefile
