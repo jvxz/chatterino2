@@ -1,8 +1,8 @@
 // Multi-POV support for lofi-nopixel.com.
 //
 // Tells Chatterino which chat the page is showing and where it is on screen,
-// so Chatterino can sit on top of it ("overlay"), plus which POVs have a chat
-// open at all ("multipov", for the optional Multi-POV tab). POVs are reported
+// so Chatterino can sit on top of it ("overlay"), plus which POVs the page
+// has open ("multipov", for the optional Multi-POV tab). POVs are reported
 // as the site's own slugs ("t-xqc" for Twitch, "k-xqc" for Kick); Chatterino
 // maps both to the Twitch channel of the same name.
 (() => {
@@ -10,15 +10,17 @@
   // window doesn't fire any event inside the page, so this has to poll.
   const POLL_MS = 100;
 
-  // Chat embeds the site shows
+  // Chat embeds the site shows. Only the selected POV's chat is in the page.
   const chatFrameMatchers = [
-    // https://www.twitch.tv/embed/<name>/chat?parent=...
-    { prefix: 't-', re: /^https:\/\/(?:www\.)?twitch\.tv\/embed\/(\w+)\/chat/ },
+    // https://chat.kick.cx/embed/<name>, what the site uses for Kick POVs
+    { prefix: 'k-', re: /^https:\/\/chat\.kick\.cx\/embed\/([\w-]+)/ },
     // https://kick.com/popout/<name>/chat
     {
       prefix: 'k-',
       re: /^https:\/\/(?:www\.)?kick\.com\/popout\/([\w-]+)\/chat/,
     },
+    // https://www.twitch.tv/embed/<name>/chat?parent=...
+    { prefix: 't-', re: /^https:\/\/(?:www\.)?twitch\.tv\/embed\/(\w+)\/chat/ },
   ];
 
   let lastOverlay = null;
@@ -26,6 +28,20 @@
 
   function isMultiPov() {
     return location.pathname.startsWith('/multipov');
+  }
+
+  /**
+   * POVs open on the page, from its URL: /multipov/k-anthonyz/t-xqc
+   * @returns {string[]}
+   */
+  function povsFromUrl() {
+    const povs = [];
+    for (const segment of location.pathname.split('/').slice(2)) {
+      if (!segment) continue;
+      const pov = decodeURIComponent(segment).toLowerCase();
+      if (!povs.includes(pov)) povs.push(pov);
+    }
+    return povs;
   }
 
   function povFromFrame(frame) {
@@ -38,17 +54,15 @@
   }
 
   /**
-   * @returns {{ povs: string[], shown: { pov: string, rect: DOMRect } | null }}
-   *   every POV with a chat embed, and the largest visible one
+   * @returns {{ pov: string, rect: DOMRect } | null}
+   *   the largest visible chat embed
    */
-  function findChats() {
-    const povs = [];
+  function findShownChat() {
     let shown = null;
     let shownArea = 0;
     for (const frame of document.getElementsByTagName('iframe')) {
       const pov = povFromFrame(frame);
       if (!pov) continue;
-      if (!povs.includes(pov)) povs.push(pov);
 
       const rect = frame.getBoundingClientRect();
       const area = rect.width * rect.height;
@@ -57,7 +71,7 @@
         shownArea = area;
       }
     }
-    return { povs, shown };
+    return shown;
   }
 
   function post(message) {
@@ -85,7 +99,8 @@
       return;
     }
 
-    const { povs, shown } = findChats();
+    const povs = povsFromUrl();
+    const shown = findShownChat();
 
     // Leaving the Multi-POV page doesn't clear the tab, so the last set of
     // chats stays open while browsing the rest of the site.
