@@ -66,9 +66,9 @@ deps:
 	brew install boost openssl@3 rapidjson cmake qt ninja ccache $(if $(filter ON On on,$(SPELLCHECK)),hunspell)
 	git submodule update --init --recursive
 
+# -n: the browser may already be running this bundle as its native messaging
+# host, which would make a plain open fail with error -600
 run: build
-	# -n: the browser may already be running this bundle as its native
-	# messaging host, which would make a plain open fail with error -600
 	open -n "$(APP)"
 
 # Bundle Qt into a staged copy so the build tree stays incrementally buildable
