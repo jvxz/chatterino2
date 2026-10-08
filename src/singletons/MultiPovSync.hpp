@@ -11,6 +11,10 @@
 class QJsonArray;
 class QRect;
 
+namespace chatterino {
+class Paths;
+}  // namespace chatterino
+
 /// Keeps a "Multi-POV" tab in sync with the POVs that have chat enabled on
 /// lofi-nopixel.com's Multi-POV viewer. Driven by the `multipov` action of the
 /// browser extension (see NativeMessaging.cpp).
@@ -37,5 +41,9 @@ void showOverlay(const QString &channel, const QRect &rect);
 /// Hides the overlay window, unless it's in use. Must be called from the GUI
 /// thread.
 void hideOverlay();
+
+/// File the overlay's chat background color (#rrggbb) is written to, so the
+/// browser extension host can pass it on to the page under the overlay.
+QString overlayBackgroundPath(const Paths &paths);
 
 }  // namespace chatterino::multipov

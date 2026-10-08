@@ -4,8 +4,13 @@
 
 #include "BrowserExtension.hpp"
 
+#include "singletons/MultiPovSync.hpp"
 #include "singletons/NativeMessaging.hpp"
+#include "singletons/Paths.hpp"
 #include "util/RenameThread.hpp"
+
+#include <QColor>
+#include <QFile>
 
 #include <iostream>
 #include <memory>
@@ -57,8 +62,35 @@ QByteArray receiveFromBrowser()
     return buffer;
 }
 
-void runLoop()
+/// Sends the overlay's chat background to the browser when it changed, so the
+/// lofi-nopixel page can match it under the overlay. Chatterino writes it when
+/// it shows the overlay, see multipov::showOverlay.
+void sendOverlayBackground(const QString &path, QByteArray &sent)
 {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        return;
+    }
+    const QColor color(QString::fromLatin1(file.read(16).trimmed()));
+    if (!color.isValid())
+    {
+        return;
+    }
+    auto name = color.name().toLatin1();
+    if (name == sent)
+    {
+        return;
+    }
+    sent = name;
+
+    QByteArray message = R"({"type":"theme","background":")" + name + R"("})";
+    sendToBrowser(QLatin1String{message});
+}
+
+void runLoop(const QString &overlayBackgroundPath)
+{
+    QByteArray sentBackground;
     auto receivedMessage = std::make_shared<std::atomic_bool>(true);
 
     auto thread = std::thread([=]() {
@@ -87,6 +119,11 @@ void runLoop()
         receivedMessage->store(true);
 
         nm::client::sendMessage(buffer);
+
+        if (buffer.contains(R"("action":"overlay","pov")"))
+        {
+            sendOverlayBackground(overlayBackgroundPath, sentBackground);
+        }
     }
 
     sendToBrowser(QLatin1String{
@@ -97,11 +134,11 @@ void runLoop()
 
 namespace chatterino {
 
-void runBrowserExtensionHost()
+void runBrowserExtensionHost(const Paths &paths)
 {
     initFileMode();
 
-    runLoop();
+    runLoop(multipov::overlayBackgroundPath(paths));
 }
 
 }  // namespace chatterino

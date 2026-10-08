@@ -8,7 +8,9 @@
 #include "common/Channel.hpp"
 #include "debug/AssertInGuiThread.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
+#include "singletons/Paths.hpp"
 #include "singletons/Settings.hpp"
+#include "singletons/Theme.hpp"
 #include "singletons/WindowManager.hpp"
 #include "widgets/helper/NotebookTab.hpp"
 #include "widgets/Notebook.hpp"
@@ -17,6 +19,7 @@
 #include "widgets/splits/SplitContainer.hpp"
 #include "widgets/Window.hpp"
 
+#include <QFile>
 #include <QJsonArray>
 #include <QPointer>
 
@@ -178,6 +181,20 @@ void showOverlay(const QString &channel, const QRect &rect)
 {
     assertInGuiThread();
 
+    // Only written when the theme changed since the last time
+    static QString writtenBackground;
+    const auto background =
+        getApp()->getThemes()->messages.backgrounds.regular.name();
+    if (background != writtenBackground)
+    {
+        QFile file(overlayBackgroundPath(getApp()->getPaths()));
+        if (file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        {
+            file.write(background.toLatin1());
+            writtenBackground = background;
+        }
+    }
+
     auto &window = overlay();
     if (window.isNull())
     {
@@ -194,6 +211,11 @@ void hideOverlay()
     {
         window->requestHide();
     }
+}
+
+QString overlayBackgroundPath(const Paths &paths)
+{
+    return paths.miscDirectory + QStringLiteral("/lofi-overlay-background");
 }
 
 }  // namespace chatterino::multipov

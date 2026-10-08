@@ -871,8 +871,6 @@ public:
     QStringSetting additionalExtensionIDs{"/misc/additionalExtensionIDs", ""};
 
     BoolSetting povOverlayEnabled{"/misc/extension/multiPov/overlay", true};
-    /// Width the overlay was dragged to, 0 to match the site's chat
-    IntSetting povOverlayWidth{"/misc/extension/multiPov/overlayWidth", 0};
     BoolSetting multiPovSyncEnabled{"/misc/extension/multiPov/enabled", false};
     BoolSetting multiPovSyncInMainWindow{
         "/misc/extension/multiPov/inMainWindow", false};

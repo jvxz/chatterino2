@@ -8,7 +8,6 @@
 #include <QWidget>
 
 #include <memory>
-#include <optional>
 
 namespace chatterino {
 
@@ -23,9 +22,8 @@ using ChannelPtr = std::shared_ptr<Channel>;
 /// works on macOS too: the browser extension sends the panel's position in
 /// screen coordinates whenever it changes.
 ///
-/// Its left edge can be dragged to make it wider or narrower than the panel,
-/// keeping its right edge on the panel's. Double-clicking the edge goes back to
-/// the panel's width.
+/// It always matches the panel. The extension adds a handle to resize the
+/// panel on the page, and the overlay follows.
 class PovOverlayWindow : public QWidget
 {
 public:
@@ -43,26 +41,9 @@ protected:
     void changeEvent(QEvent *event) override;
     void showEvent(QShowEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
-    bool eventFilter(QObject *object, QEvent *event) override;
 
 private:
-    /// The window's geometry over `panel`, with the width it was dragged to
-    QRect geometryFor(const QRect &panel) const;
-
-    void dragTo(int globalX);
-
     Split *split_;
-    /// Strip along the left edge that resizes the window
-    QWidget *resizeGrip_;
-
-    /// Last position of the browser's chat panel
-    QRect panel_;
-
-    struct Drag {
-        int startX;
-        int startWidth;
-    };
-    std::optional<Drag> drag_;
 
     /// Hides the window shortly after it loses focus, unless the browser
     /// shows it again in the meantime (focus went back to the browser).

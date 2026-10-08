@@ -101,7 +101,7 @@ int main(int argc, char **argv)
 #ifdef Q_OS_MACOS
         ::chatterinoSetMacOsActivationPolicyProhibited();
 #endif
-        runBrowserExtensionHost();
+        runBrowserExtensionHost(*paths);
     }
     else if (args.printVersion)
     {

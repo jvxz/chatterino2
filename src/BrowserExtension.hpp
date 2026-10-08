@@ -6,6 +6,8 @@
 
 namespace chatterino {
 
-void runBrowserExtensionHost();
+class Paths;
+
+void runBrowserExtensionHost(const Paths &paths);
 
 }  // namespace chatterino

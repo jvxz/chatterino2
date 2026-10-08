@@ -24,8 +24,23 @@
   ];
 
   // The site's own chat is unloaded while Chatterino covers it, so it stops
-  // loading messages and emotes nobody sees. Its URL is kept on the frame.
-  const BLANK = 'about:blank';
+  // loading messages and emotes nobody sees. A srcdoc replaces the page in the
+  // frame but leaves its src alone, so the chat can still be told apart. The
+  // empty frame takes the background of Chatterino's chat, which Chatterino
+  // reports through the background page.
+  const BACKGROUND_KEY = 'chatterinoBackground';
+  let background = 'transparent';
+
+  chrome.storage.local.get(BACKGROUND_KEY).then(stored => {
+    background = stored[BACKGROUND_KEY] ?? background;
+    update(true);
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[BACKGROUND_KEY]?.newValue) {
+      background = changes[BACKGROUND_KEY].newValue;
+      update(true);
+    }
+  });
 
   let lastOverlay = null;
   let lastPovs = null;
@@ -48,20 +63,14 @@
     return povs;
   }
 
-  function frameSrc(frame) {
-    return frame.src === BLANK
-      ? (frame.dataset.chatterinoSrc ?? BLANK)
-      : frame.src;
-  }
-
   function unloadChat(frame) {
-    if (frame.src === BLANK) return;
-    frame.dataset.chatterinoSrc = frame.src;
-    frame.src = BLANK;
+    // color-scheme matches the site's, or Chrome paints the frame white
+    const srcdoc = `<style>:root { color-scheme: dark; background: ${background}; }</style>`;
+    if (frame.srcdoc !== srcdoc) frame.srcdoc = srcdoc;
   }
 
   function povFromFrame(frame) {
-    const src = frameSrc(frame);
+    const src = frame.src;
     for (const { prefix, re } of chatFrameMatchers) {
       const match = src.match(re);
       if (match) return prefix + match[1].toLowerCase();
@@ -90,6 +99,127 @@
     return shown;
   }
 
+  // The site has no way to resize its chat column, so a handle on its left edge
+  // does. Chatterino follows the chat's size, so this resizes it too. The
+  // handle sits just outside the column, since Chatterino covers the column.
+  const WIDTH_KEY = 'lofiChatWidth';
+  const MIN_CHAT_WIDTH = 200;
+  const GRIP_WIDTH = 8;
+
+  /** @type {number | null} width the column was dragged to, in CSS pixels */
+  let chatWidth = null;
+  /** @type {HTMLElement | null} */
+  let panel = null;
+  const grip = document.createElement('div');
+  grip.title = 'Drag to resize the chat, double-click to reset';
+  grip.style.cssText = `position: fixed; z-index: 2147483647; width: ${GRIP_WIDTH}px; cursor: col-resize; display: none;`;
+  grip.addEventListener('pointerenter', () => {
+    grip.style.background = 'rgba(255, 255, 255, 0.15)';
+  });
+  grip.addEventListener('pointerleave', () => {
+    grip.style.background = '';
+  });
+
+  chrome.storage.local.get(WIDTH_KEY).then(stored => {
+    chatWidth = stored[WIDTH_KEY] ?? null;
+    applyWidth();
+  });
+
+  /**
+   * The chat column: the outermost ancestor of the chat's iframe that's lined
+   * up with it on both sides (so it also holds the header and the pills).
+   * @param {HTMLIFrameElement} frame
+   */
+  function findPanel(frame) {
+    const frameRect = frame.getBoundingClientRect();
+    let found = null;
+    for (
+      let el = frame.parentElement;
+      el && el !== document.body;
+      el = el.parentElement
+    ) {
+      const rect = el.getBoundingClientRect();
+      if (
+        Math.abs(rect.left - frameRect.left) > 2 ||
+        Math.abs(rect.right - frameRect.right) > 2
+      ) {
+        break;
+      }
+      found = el;
+    }
+    return found;
+  }
+
+  function applyWidth() {
+    if (!panel) return;
+    if (chatWidth === null) {
+      for (const prop of ['width', 'min-width', 'max-width', 'flex']) {
+        panel.style.removeProperty(prop);
+      }
+      return;
+    }
+    const width = `${chatWidth}px`;
+    panel.style.setProperty('width', width, 'important');
+    panel.style.setProperty('min-width', width, 'important');
+    panel.style.setProperty('max-width', width, 'important');
+    panel.style.setProperty('flex', `0 0 ${width}`, 'important');
+  }
+
+  /** @param {HTMLIFrameElement | null} frame the shown chat, if any */
+  function followPanel(frame) {
+    const found = frame && findPanel(frame);
+    if (found !== panel) {
+      panel = found;
+      applyWidth();
+    }
+    if (!panel) {
+      grip.style.display = 'none';
+      return;
+    }
+    if (!grip.isConnected) document.documentElement.append(grip);
+    const rect = panel.getBoundingClientRect();
+    grip.style.left = `${rect.left - GRIP_WIDTH}px`;
+    grip.style.top = `${rect.top}px`;
+    grip.style.height = `${rect.height}px`;
+    grip.style.display = '';
+  }
+
+  grip.addEventListener('pointerdown', down => {
+    if (!panel || down.button !== 0) return;
+    down.preventDefault();
+    grip.setPointerCapture(down.pointerId);
+    const startX = down.clientX;
+    const startWidth = panel.getBoundingClientRect().width;
+
+    const move = event => {
+      const maxWidth = Math.max(MIN_CHAT_WIDTH, window.innerWidth * 0.75);
+      chatWidth = Math.round(
+        Math.min(
+          maxWidth,
+          Math.max(MIN_CHAT_WIDTH, startWidth + startX - event.clientX),
+        ),
+      );
+      applyWidth();
+      update();
+    };
+    const up = () => {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      grip.removeEventListener('pointercancel', up);
+      chrome.storage.local.set({ [WIDTH_KEY]: chatWidth }).catch(() => {});
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', up);
+  });
+
+  grip.addEventListener('dblclick', () => {
+    chatWidth = null;
+    applyWidth();
+    chrome.storage.local.remove(WIDTH_KEY).catch(() => {});
+    update();
+  });
+
   function post(message) {
     try {
       chrome.runtime.sendMessage(message);
@@ -111,6 +241,7 @@
       document.visibilityState !== 'visible' ||
       document.fullscreenElement
     ) {
+      followPanel(null);
       hideOverlay();
       return;
     }
@@ -126,6 +257,7 @@
       post({ type: 'multipov', povs });
     }
 
+    followPanel(shown?.frame ?? null);
     if (!shown) {
       hideOverlay();
       return;

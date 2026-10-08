@@ -152,7 +152,14 @@ function connectPort() {
   console.debug('port connected');
 
   port.onMessage.addListener(msg => {
-    if (typeof msg === 'object' && msg.type === 'status') {
+    if (typeof msg === 'object' && msg.type === 'theme') {
+      // Chatterino's chat background, for the lofi-nopixel content script
+      if (/^#[0-9a-f]{6}$/i.test(msg.background)) {
+        chrome.storage.local
+          .set({ chatterinoBackground: msg.background })
+          .catch(() => {});
+      }
+    } else if (typeof msg === 'object' && msg.type === 'status') {
       switch (msg.status) {
         case 'exiting-host':
           console.info(
