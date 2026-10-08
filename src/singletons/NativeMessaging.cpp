@@ -41,6 +41,9 @@ using namespace chatterino;
 using namespace chatterino::literals;
 
 const QString EXTENSION_ID = u"glknmaideaikkmemifbfkhnomoknepka"_s;
+/// The fork's own extension in browser-extension/. Its manifest.json carries
+/// the public key that pins this ID when it's loaded unpacked.
+const QString FORK_EXTENSION_ID = u"afefhbafakhlibphahdnhachdbhmpakm"_s;
 constexpr const size_t MESSAGE_SIZE = 1024;
 
 struct Config {
@@ -124,7 +127,9 @@ QJsonDocument buildChromeManifest(const QStringList &extensionIDs)
 {
     auto obj = buildBaseDocument();
     QJsonArray allowedOriginsArr = {
-        u"chrome-extension://%1/"_s.arg(EXTENSION_ID)};
+        u"chrome-extension://%1/"_s.arg(EXTENSION_ID),
+        u"chrome-extension://%1/"_s.arg(FORK_EXTENSION_ID),
+    };
 
     for (const auto &id : extensionIDs)
     {

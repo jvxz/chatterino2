@@ -2,6 +2,7 @@
   "$schema": "https://json.schemastore.org/chrome-manifest",
   "name": "Chatterino Native Host",
   "version": "1.8",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyuZwWX3VuzOKbXFnFyOZBpZslgJngYM/91c1lns0dGI+nHbFP8sXhkMHJkRyvwUx+M7j/Icbx5q8NMqIXURA1bCT5AJ42vz0zcGtl8tJgpXDW5VUWd6Yz/3idP8m9VxCtkLzvNbaRQvn2W6LxtSdaB8oVJDng9ZmS6imD7m1DuvXKAgEJsL5XpM4KoN5q5GT9cC3jUVJAYBHR9lIecpsQQPvCzfluzt/QfyTD7kMdOhNO7S7FqYx9Uj8olZJ7+vrIQJXZKavAIZz4zLpIcXNf5H8cVbBFGN8oYzMBbumM/uGPcrDWCJVHli3+XLHCXUzNnk8YGJt+RrpA+7uXinf1QIDAQAB",
   "description": "Replaces the chat on Twitch.tv with Chatterino.",
   "permissions": ["tabs", "nativeMessaging", "storage"],
   "host_permissions": ["*://*.twitch.tv/*"],

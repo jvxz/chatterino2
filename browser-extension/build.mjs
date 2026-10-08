@@ -22,6 +22,8 @@ const mapManifest = async (path, fn) => {
 // submitted to the respective store), these unknown keys are deleted.
 mapManifest('build/firefox/manifest.json', json => {
   delete json.background.service_worker;
+  // Chrome-only: pins the unpacked extension's ID
+  delete json.key;
 });
 mapManifest('build/chrome/manifest.json', json => {
   delete json.background.scripts;
