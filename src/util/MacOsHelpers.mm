@@ -1,8 +1,19 @@
 #include "util/MacOsHelpers.h"
 
 #include <AppKit/AppKit.h>
-#include <objc/message.h>
 #include <QUrl>
+
+/// Borderless windows can't become key by default, which they need to take
+/// typing.
+@interface ChatterinoOverlayPanel : NSPanel
+@end
+
+@implementation ChatterinoOverlayPanel
+- (BOOL)canBecomeKeyWindow
+{
+    return YES;
+}
+@end
 
 void chatterinoSetMacOsActivationPolicyProhibited()
 {
@@ -33,27 +44,56 @@ QString getMacOSDefaultBrowserPath()
         return QUrl::fromNSURL(execUrl).toLocalFile();    }
 }
 
-void makeMacOSWindowNonActivating(WId winId)
+namespace {
+
+NSWindow *overlayPanel(WId contentView)
 {
-    NSView *view = (__bridge NSView *)reinterpret_cast<void *>(winId);
-    NSWindow *window = view.window;
-    if (![window isKindOfClass:[NSPanel class]] ||
-        (window.styleMask & NSWindowStyleMaskNonactivatingPanel) != 0)
-    {
-        return;
-    }
+    return ((__bridge NSView *)reinterpret_cast<void *>(contentView)).window;
+}
 
-    window.styleMask |= NSWindowStyleMaskNonactivatingPanel;
+}  // namespace
 
-    // AppKit only reads the style when the window is created to decide whether
-    // clicking it activates the app. Qt has already created it by now, so tell
-    // the window server directly when that private setter exists.
-    SEL preventsActivation = NSSelectorFromString(@"_setPreventsActivation:");
-    if ([window respondsToSelector:preventsActivation])
+WId createMacOSOverlayPanel()
+{
+    // Lives as long as the overlay, which lives as long as the app
+    ChatterinoOverlayPanel *panel = [[ChatterinoOverlayPanel alloc]
+        initWithContentRect:NSMakeRect(0, 0, 300, 600)
+                  styleMask:NSWindowStyleMaskBorderless |
+                            NSWindowStyleMaskNonactivatingPanel
+                    backing:NSBackingStoreBuffered
+                      defer:NO];
+    panel.floatingPanel = YES;
+    panel.hidesOnDeactivate = NO;
+    panel.releasedWhenClosed = NO;
+    panel.becomesKeyOnlyIfNeeded = NO;
+    panel.collectionBehavior = NSWindowCollectionBehaviorFullScreenAuxiliary |
+                               NSWindowCollectionBehaviorMoveToActiveSpace;
+
+    return reinterpret_cast<WId>((__bridge void *)panel.contentView);
+}
+
+void showMacOSOverlayPanel(WId contentView, const QRect &rect)
+{
+    NSWindow *panel = overlayPanel(contentView);
+
+    // Cocoa's origin is the bottom left corner of the primary screen
+    const CGFloat primaryHeight = NSScreen.screens.firstObject.frame.size.height;
+    const NSRect frame =
+        NSMakeRect(rect.x(), primaryHeight - rect.y() - rect.height(),
+                   rect.width(), rect.height());
+    if (!NSEqualRects(panel.frame, frame))
     {
-        reinterpret_cast<void (*)(id, SEL, BOOL)>(objc_msgSend)(
-            window, preventsActivation, YES);
+        [panel setFrame:frame display:YES];
     }
+    if (!panel.visible)
+    {
+        [panel orderFrontRegardless];
+    }
+}
+
+void hideMacOSOverlayPanel(WId contentView)
+{
+    [overlayPanel(contentView) orderOut:nil];
 }
 #endif
 
