@@ -1004,9 +1004,14 @@ void GeneralPage::initLayout(GeneralPageView &layout)
 
     layout.addSubtitle("lofi-nopixel Multi-POV");
     layout.addDescription(
-        "Keeps a \"Multi-POV\" tab showing the chats you have open on "
-        "lofi-nopixel.com. Kick POVs show the Twitch chat with the same name.");
-    SettingWidget::checkbox("Sync chats from lofi-nopixel Multi-POV",
+        "Shows the chat selected on lofi-nopixel.com's Multi-POV page in "
+        "Chatterino. Kick POVs show the Twitch chat with the same name.");
+    SettingWidget::checkbox("Replace the lofi-nopixel chat with Chatterino",
+                            s.povOverlayEnabled)
+        ->setTooltip("Places Chatterino over the chat panel on the page while "
+                     "the browser is in front.")
+        ->addTo(layout);
+    SettingWidget::checkbox("Also keep a Multi-POV tab with every open chat",
                             s.multiPovSyncEnabled)
         ->addTo(layout);
     SettingWidget::checkbox("Open the Multi-POV tab in the main window",

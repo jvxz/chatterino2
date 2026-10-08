@@ -370,6 +370,9 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
         }
       });
       break;
+    case 'overlay':
+      updateOverlay(sender.tab, message);
+      break;
   }
 });
 
@@ -475,5 +478,85 @@ chrome.tabs.onRemoved.addListener(() => syncTabs());
 chrome.tabs.onUpdated.addListener((id, changeInfo) => {
   if ('url' in changeInfo) {
     syncTabs();
+  }
+});
+
+// lofi-nopixel.com overlay: Chatterino sits on top of the chat on the page
+
+/** @param {object} data */
+function postOverlay(data) {
+  const port = getPort();
+  if (port) {
+    port.postMessage({ action: 'overlay', ...data });
+  }
+}
+
+/** Hides the overlay, and forgets which tab it was for */
+async function hideOverlay() {
+  await chrome.storage.session.remove('overlayTabId').catch(() => {});
+  postOverlay({});
+}
+
+/**
+ * @param {chrome.tabs.Tab} tab
+ * @param {{ pov: string | null, rect?: DOMRectInit, viewport?: object }} message
+ */
+async function updateOverlay(tab, message) {
+  if (!message.pov || !tab.active) {
+    await hideOverlay();
+    return;
+  }
+
+  const window = await chrome.windows.get(tab.windowId);
+  if (!window.focused) {
+    await hideOverlay();
+    return;
+  }
+
+  // The page reports CSS pixels relative to its viewport. Chatterino wants
+  // screen coordinates (points on macOS), so undo the tab's zoom and add the
+  // browser's toolbar above the page.
+  const zoom = await chrome.tabs.getZoom(tab.id);
+  const { rect, viewport: v } = message;
+  const top = v.screenY + v.outerHeight - v.innerHeight * zoom;
+  const left = v.screenX + (v.outerWidth - v.innerWidth * zoom) / 2;
+
+  await chrome.storage.session.set({ overlayTabId: tab.id }).catch(() => {});
+  postOverlay({
+    pov: message.pov,
+    rect: {
+      x: left + rect.x * zoom,
+      y: top + rect.y * zoom,
+      width: rect.width * zoom,
+      height: rect.height * zoom,
+    },
+  });
+}
+
+// Another app or browser window came to the front. When the browser window is
+// focused again, the page re-sends the overlay on its own.
+chrome.windows.onFocusChanged.addListener(async windowId => {
+  const { overlayTabId } = await chrome.storage.session
+    .get('overlayTabId')
+    .catch(() => ({}));
+  if (overlayTabId === undefined) return;
+
+  if (windowId === chrome.windows.WINDOW_ID_NONE) {
+    await hideOverlay();
+    return;
+  }
+  const tab = await chrome.tabs.get(overlayTabId).catch(() => null);
+  if (!tab || tab.windowId !== windowId) {
+    await hideOverlay();
+  }
+});
+
+// The page can't always report this itself
+chrome.tabs.onRemoved.addListener(async tabId => {
+  const { overlayTabId } = await chrome.storage.session
+    .get('overlayTabId')
+    .catch(() => ({}));
+  if (overlayTabId === tabId) {
+    await hideOverlay();
   }
 });

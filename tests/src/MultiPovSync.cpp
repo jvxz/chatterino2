@@ -39,3 +39,13 @@ TEST(MultiPovSync, twitchChannelsFromPovs)
         ASSERT_EQ(multipov::twitchChannelsFromPovs(input), expected);
     }
 }
+
+TEST(MultiPovSync, twitchChannelFromPov)
+{
+    ASSERT_EQ(multipov::twitchChannelFromPov("k-AnthonyZ").value_or(""),
+              QString("anthonyz"));
+    ASSERT_EQ(multipov::twitchChannelFromPov("t-xqc").value_or(""),
+              QString("xqc"));
+    ASSERT_FALSE(multipov::twitchChannelFromPov("").has_value());
+    ASSERT_FALSE(multipov::twitchChannelFromPov("k-not-twitch").has_value());
+}

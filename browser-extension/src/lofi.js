@@ -1,13 +1,16 @@
 // Multi-POV support for lofi-nopixel.com.
 //
-// Reports which POVs currently have their chat open, so Chatterino can keep
-// its "Multi-POV" tab in sync. POVs are reported as the site's own slugs
-// ("t-xqc" for Twitch, "k-xqc" for Kick); Chatterino maps both to the Twitch
-// channel of the same name.
+// Tells Chatterino which chat the page is showing and where it is on screen,
+// so Chatterino can sit on top of it ("overlay"), plus which POVs have a chat
+// open at all ("multipov", for the optional Multi-POV tab). POVs are reported
+// as the site's own slugs ("t-xqc" for Twitch, "k-xqc" for Kick); Chatterino
+// maps both to the Twitch channel of the same name.
 (() => {
-  const DEBOUNCE_MS = 150;
+  // How often the chat's position is checked. Moving or resizing the browser
+  // window doesn't fire any event inside the page, so this has to poll.
+  const POLL_MS = 100;
 
-  // Chat embeds the site opens when a POV's chat is toggled on
+  // Chat embeds the site shows
   const chatFrameMatchers = [
     // https://www.twitch.tv/embed/<name>/chat?parent=...
     { prefix: 't-', re: /^https:\/\/(?:www\.)?twitch\.tv\/embed\/(\w+)\/chat/ },
@@ -18,69 +21,113 @@
     },
   ];
 
-  let lastSent = null;
-  let timer = 0;
+  let lastOverlay = null;
+  let lastPovs = null;
 
   function isMultiPov() {
     return location.pathname.startsWith('/multipov');
   }
 
-  /** @returns {string[]} slugs of POVs with chat open, in page order */
-  function findOpenChats() {
+  function povFromFrame(frame) {
+    const src = frame.src;
+    for (const { prefix, re } of chatFrameMatchers) {
+      const match = src.match(re);
+      if (match) return prefix + match[1].toLowerCase();
+    }
+    return null;
+  }
+
+  /**
+   * @returns {{ povs: string[], shown: { pov: string, rect: DOMRect } | null }}
+   *   every POV with a chat embed, and the largest visible one
+   */
+  function findChats() {
     const povs = [];
+    let shown = null;
+    let shownArea = 0;
     for (const frame of document.getElementsByTagName('iframe')) {
-      const src = frame.src;
-      for (const { prefix, re } of chatFrameMatchers) {
-        const match = src.match(re);
-        if (match) {
-          const slug = prefix + match[1].toLowerCase();
-          if (!povs.includes(slug)) povs.push(slug);
-          break;
-        }
+      const pov = povFromFrame(frame);
+      if (!pov) continue;
+      if (!povs.includes(pov)) povs.push(pov);
+
+      const rect = frame.getBoundingClientRect();
+      const area = rect.width * rect.height;
+      if (area > shownArea) {
+        shown = { pov, rect };
+        shownArea = area;
       }
     }
-    return povs;
+    return { povs, shown };
   }
 
-  function send(force = false) {
-    timer = 0;
-    // Leaving the Multi-POV page doesn't clear the tab, so the last set of
-    // chats stays open while browsing the rest of the site.
-    if (!isMultiPov()) return;
-
-    const povs = findOpenChats();
-    const key = povs.join(',');
-    if (!force && key === lastSent) return;
-    lastSent = key;
-
+  function post(message) {
     try {
-      chrome.runtime.sendMessage({ type: 'multipov', povs });
-    } catch (err) {
+      chrome.runtime.sendMessage(message);
+    } catch {
       // Extension was reloaded; this content script is orphaned
-      observer.disconnect();
+      clearInterval(timer);
     }
   }
 
-  function schedule() {
-    if (!timer) timer = setTimeout(send, DEBOUNCE_MS);
+  function hideOverlay() {
+    if (lastOverlay === '') return;
+    lastOverlay = '';
+    post({ type: 'overlay', pov: null });
   }
 
-  // Chats are toggled by adding/removing iframes (or swapping their src), so
-  // one observer on the body catches every toggle and SPA navigation.
-  const observer = new MutationObserver(schedule);
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['src'],
-  });
+  function update(force = false) {
+    if (
+      !isMultiPov() ||
+      document.visibilityState !== 'visible' ||
+      document.fullscreenElement
+    ) {
+      hideOverlay();
+      return;
+    }
 
-  // Coming back to this tab: re-apply its chats, another tab may have changed
-  // them in the meantime.
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') send(true);
-  });
-  window.addEventListener('focus', () => send(true));
+    const { povs, shown } = findChats();
 
-  schedule();
+    // Leaving the Multi-POV page doesn't clear the tab, so the last set of
+    // chats stays open while browsing the rest of the site.
+    const povsKey = povs.join(',');
+    if (force || povsKey !== lastPovs) {
+      lastPovs = povsKey;
+      post({ type: 'multipov', povs });
+    }
+
+    if (!shown) {
+      hideOverlay();
+      return;
+    }
+
+    const { x, y, width, height } = shown.rect;
+    const overlay = {
+      type: 'overlay',
+      pov: shown.pov,
+      rect: { x, y, width, height },
+      viewport: {
+        screenX: window.screenX,
+        screenY: window.screenY,
+        outerWidth: window.outerWidth,
+        outerHeight: window.outerHeight,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+      },
+    };
+    const overlayKey = JSON.stringify(overlay);
+    if (force || overlayKey !== lastOverlay) {
+      lastOverlay = overlayKey;
+      post(overlay);
+    }
+  }
+
+  const timer = setInterval(update, POLL_MS);
+
+  // Switching to another tab or app hides the overlay, coming back shows it
+  // again right away.
+  document.addEventListener('visibilitychange', () => update(true));
+  window.addEventListener('focus', () => update(true));
+  window.addEventListener('pagehide', hideOverlay);
+
+  update(true);
 })();

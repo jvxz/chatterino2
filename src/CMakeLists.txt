@@ -667,6 +667,8 @@ set(SOURCE_FILES
         widgets/OverlayWindow.hpp
         widgets/PluginRepl.cpp
         widgets/PluginRepl.hpp
+        widgets/PovOverlayWindow.cpp
+        widgets/PovOverlayWindow.hpp
         widgets/Scrollbar.cpp
         widgets/Scrollbar.hpp
         widgets/TooltipEntryWidget.cpp

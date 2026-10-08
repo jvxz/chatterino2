@@ -12,17 +12,25 @@
 #include "singletons/WindowManager.hpp"
 #include "widgets/helper/NotebookTab.hpp"
 #include "widgets/Notebook.hpp"
+#include "widgets/PovOverlayWindow.hpp"
 #include "widgets/splits/Split.hpp"
 #include "widgets/splits/SplitContainer.hpp"
 #include "widgets/Window.hpp"
 
 #include <QJsonArray>
+#include <QPointer>
 
 namespace {
 
 using namespace chatterino;
 
 const QString TAB_TITLE = QStringLiteral("Multi-POV");
+
+QPointer<PovOverlayWindow> &overlay()
+{
+    static QPointer<PovOverlayWindow> window;
+    return window;
+}
 
 /// Twitch logins are 1-25 characters of [a-z0-9_]. Notably they can't contain
 /// '-', which is what makes the "t-"/"k-" prefixes unambiguous.
@@ -89,6 +97,21 @@ SplitContainer *createContainer()
 
 namespace chatterino::multipov {
 
+std::optional<QString> twitchChannelFromPov(const QString &pov)
+{
+    auto name = pov.trimmed().toLower();
+    if (name.startsWith(u"t-") || name.startsWith(u"k-"))
+    {
+        name.remove(0, 2);
+    }
+
+    if (!isValidTwitchLogin(name))
+    {
+        return std::nullopt;
+    }
+    return name;
+}
+
 QStringList twitchChannelsFromPovs(const QJsonArray &povs)
 {
     QStringList channels;
@@ -96,15 +119,10 @@ QStringList twitchChannelsFromPovs(const QJsonArray &povs)
 
     for (const auto value : povs)
     {
-        auto name = value.toString().trimmed().toLower();
-        if (name.startsWith(u"t-") || name.startsWith(u"k-"))
+        auto name = twitchChannelFromPov(value.toString());
+        if (name && !channels.contains(*name))
         {
-            name.remove(0, 2);
-        }
-
-        if (isValidTwitchLogin(name) && !channels.contains(name))
-        {
-            channels.append(name);
+            channels.append(*name);
         }
     }
 
@@ -153,6 +171,28 @@ void syncSplits(const QStringList &channels)
         auto *window = container->window();
         window->show();
         window->raise();
+    }
+}
+
+void showOverlay(const QString &channel, const QRect &rect)
+{
+    assertInGuiThread();
+
+    auto &window = overlay();
+    if (window.isNull())
+    {
+        window = new PovOverlayWindow();
+    }
+    window->showAt(rect, getApp()->getTwitch()->getOrAddChannel(channel));
+}
+
+void hideOverlay()
+{
+    assertInGuiThread();
+
+    if (auto &window = overlay(); !window.isNull())
+    {
+        window->requestHide();
     }
 }
 

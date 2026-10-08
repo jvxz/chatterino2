@@ -870,7 +870,8 @@ public:
     // Advanced
     QStringSetting additionalExtensionIDs{"/misc/additionalExtensionIDs", ""};
 
-    BoolSetting multiPovSyncEnabled{"/misc/extension/multiPov/enabled", true};
+    BoolSetting povOverlayEnabled{"/misc/extension/multiPov/overlay", true};
+    BoolSetting multiPovSyncEnabled{"/misc/extension/multiPov/enabled", false};
     BoolSetting multiPovSyncInMainWindow{
         "/misc/extension/multiPov/inMainWindow", false};
     BoolSetting multiPovSyncRaiseWindow{"/misc/extension/multiPov/raiseWindow",

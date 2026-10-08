@@ -24,6 +24,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QRect>
 #include <QSettings>
 #include <QStringBuilder>
 
@@ -426,6 +427,11 @@ void NativeMessagingServer::ReceiverThread::handleMessage(
         this->handleMultiPov(root);
         return;
     }
+    if (action == "overlay")
+    {
+        this->handleOverlay(root);
+        return;
+    }
 
     qCDebug(chatterinoNativeMessage) << "NM unknown action" << action;
 }
@@ -534,6 +540,32 @@ void NativeMessagingServer::ReceiverThread::handleMultiPov(
         {
             multipov::syncSplits(channels);
         }
+    });
+}
+
+void NativeMessagingServer::ReceiverThread::handleOverlay(
+    const QJsonObject &root)
+{
+    // Structure:
+    // { action: 'overlay', pov?: string, rect?: { x, y, width, height } }
+    // pov is the lofi-nopixel.com slug of the chat shown in the browser, rect
+    // is that chat's position on screen in logical pixels. Without a pov or a
+    // rect, the overlay is hidden.
+    const auto channel =
+        multipov::twitchChannelFromPov(root["pov"_L1].toString());
+    const auto rectObject = root["rect"_L1].toObject();
+    const QRect rect(qRound(rectObject["x"_L1].toDouble()),
+                     qRound(rectObject["y"_L1].toDouble()),
+                     qRound(rectObject["width"_L1].toDouble()),
+                     qRound(rectObject["height"_L1].toDouble()));
+
+    postToThread([channel, rect] {
+        if (!getSettings()->povOverlayEnabled || !channel || rect.isEmpty())
+        {
+            multipov::hideOverlay();
+            return;
+        }
+        multipov::showOverlay(*channel, rect);
     });
 }
 
