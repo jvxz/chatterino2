@@ -1206,9 +1206,9 @@ std::unique_ptr<MessageElement> LinkElement::clone() const
 
 MentionElement::MentionElement(const QString &displayName, QString loginName_,
                                const MessageColor &fallbackColor_,
-                               const MessageColor &userColor_)
-    : TextElement(displayName,
-                  {MessageElementFlag::Text, MessageElementFlag::Mention})
+                               const MessageColor &userColor_,
+                               MessageElementFlags messageFlags)
+    : TextElement(displayName, messageFlags)
     , fallbackColor_(fallbackColor_)
     , userColor_(userColor_)
     , userLoginName_(std::move(loginName_))
@@ -1218,9 +1218,10 @@ MentionElement::MentionElement(const QString &displayName, QString loginName_,
 MentionElement::MentionElement(TextElement::CloneConstructorTag /* hack */,
                                QStringList words, QString loginName_,
                                const MessageColor &fallbackColor_,
-                               const MessageColor &userColor_)
+                               const MessageColor &userColor_,
+                               MessageElementFlags messageFlags)
     : TextElement(MentionElement::CloneConstructorTag{}, std::move(words),
-                  {MessageElementFlag::Text, MessageElementFlag::Mention})
+                  messageFlags)
     , fallbackColor_(fallbackColor_)
     , userColor_(userColor_)
     , userLoginName_(std::move(loginName_))
@@ -1308,10 +1309,11 @@ std::unique_ptr<MessageElement> MentionElement::clone() const
 {
     auto elem = std::make_unique<MentionElement>(
         TextElement::CloneConstructorTag{}, this->words_, this->userLoginName_,
-        this->fallbackColor_, this->userColor_);
+        this->fallbackColor_, this->userColor_, this->getFlags());
 
     elem->setTooltip(this->getTooltip());
     elem->setTrailingSpace(this->hasTrailingSpace());
+    elem->exhaustiveFlags = this->exhaustiveFlags;
     return elem;
 }
 
@@ -1500,9 +1502,11 @@ std::unique_ptr<MessageElement> LinebreakElement::clone() const
 }
 
 ScalingImageElement::ScalingImageElement(ImageSet images,
-                                         MessageElementFlags flags)
+                                         MessageElementFlags flags,
+                                         QString copyText)
     : MessageElement(flags)
     , images_(std::move(images))
+    , copyText_(std::move(copyText))
 {
 }
 
@@ -1528,6 +1532,11 @@ const ImageSet &ScalingImageElement::images() const
     return this->images_;
 }
 
+const QString &ScalingImageElement::copyText() const
+{
+    return this->copyText_;
+}
+
 QJsonObject ScalingImageElement::toJson() const
 {
     auto base = MessageElement::toJson();
@@ -1543,9 +1552,9 @@ std::string_view ScalingImageElement::type() const
 }
 std::unique_ptr<MessageElement> ScalingImageElement::clone() const
 {
-    auto elem =
-        std::make_unique<ScalingImageElement>(this->images_, this->getFlags());
-    elem->setTrailingSpace(this->hasTrailingSpace());
+    auto elem = std::make_unique<ScalingImageElement>(
+        this->images_, this->getFlags(), this->copyText_);
+    elem->cloneFrom(*this);
     return elem;
 }
 

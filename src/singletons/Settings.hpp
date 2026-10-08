@@ -167,6 +167,14 @@ public:
         "/appearance/messages/announcements/showHeader",
         true,
     };
+    BoolSetting showSubscriptionHeader = {
+        "/appearance/messages/subscriptions/showHeader",
+        true,
+    };
+    BoolSetting showWatchStreakHeader = {
+        "/appearance/messages/watchstreaks/showHeader",
+        true,
+    };
     BoolSetting animationsWhenFocused = {
         "/appearance/enableAnimationsWhenFocused", false};
     BoolSetting hideMessageTimestampsWhenLive = {
@@ -188,6 +196,14 @@ public:
                                      false};
     EnumSetting<MessageOverflow> messageOverflow = {
         "/appearance/messages/messageOverflow", MessageOverflow::Highlight};
+    BoolSetting wrapAsciiArt = {
+        "/appearance/messages/wrapAsciiArt",
+        false,
+    };
+    BoolSetting showTwitchGifs = {
+        "/appearance/messages/showTwitchGifs",
+        true,
+    };
     BoolSetting separateMessages = {"/appearance/messages/separateMessages",
                                     false};
     BoolSetting fadeMessageHistory = {"/appearance/messages/fadeMessageHistory",
@@ -208,6 +224,10 @@ public:
     EnumSetting<NotebookTabVisibility> tabVisibility = {
         "/appearance/tabVisibility",
         NotebookTabVisibility::AllTabs,
+    };
+    BoolSetting growWrappedNotebookLines = {
+        "/appearance/growWrappedNotebookLines",
+        false,
     };
 
     //    BoolSetting collapseLongMessages =
@@ -752,6 +772,7 @@ public:
 
     BoolSetting loadTwitchMessageHistoryOnConnect = {
         "/misc/twitch/loadMessageHistoryOnConnect", true};
+    QStringSetting messageHistoryUrl = {"/misc/twitch/messageHistoryUrl", ""};
     IntSetting twitchMessageHistoryLimit = {
         "/misc/twitch/messageHistoryLimit",
         800,
