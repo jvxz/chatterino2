@@ -50,7 +50,7 @@
 
   function frameSrc(frame) {
     return frame.src === BLANK
-      ? frame.dataset.chatterinoSrc ?? BLANK
+      ? (frame.dataset.chatterinoSrc ?? BLANK)
       : frame.src;
   }
 
