@@ -8,6 +8,10 @@
 #include "singletons/Settings.hpp"
 #include "widgets/splits/Split.hpp"
 
+#ifdef Q_OS_MACOS
+#    include "util/MacOsHelpers.h"
+#endif
+
 #include <QEvent>
 #include <QMouseEvent>
 #include <QScreen>
@@ -107,6 +111,16 @@ void PovOverlayWindow::changeEvent(QEvent *event)
         this->hideTimer_.start();
     }
     QWidget::changeEvent(event);
+}
+
+void PovOverlayWindow::showEvent(QShowEvent *event)
+{
+#ifdef Q_OS_MACOS
+    // Clicking the overlay would otherwise activate Chatterino, which brings
+    // the main window up in front of the browser too.
+    makeMacOSWindowNonActivating(this->winId());
+#endif
+    QWidget::showEvent(event);
 }
 
 void PovOverlayWindow::resizeEvent(QResizeEvent *event)
