@@ -113,6 +113,46 @@ ExpectedStr<void> registerNmManifest([[maybe_unused]] const Paths &paths,
     return {};
 }
 
+#ifdef Q_OS_MACOS
+/// Other Chromium-based browsers each read the Chrome manifest from their own
+/// directory. It's only written for the ones that are installed.
+const QStringList CHROMIUM_DIRECTORIES{
+    u"~/Library/Application Support/Arc/User Data"_s,
+    u"~/Library/Application Support/BraveSoftware/Brave-Browser"_s,
+    u"~/Library/Application Support/Chromium"_s,
+    u"~/Library/Application Support/Google/Chrome Beta"_s,
+    u"~/Library/Application Support/Google/Chrome Canary"_s,
+    u"~/Library/Application Support/Google/Chrome Dev"_s,
+    u"~/Library/Application Support/Microsoft Edge"_s,
+    u"~/Library/Application Support/Microsoft Edge Beta"_s,
+    u"~/Library/Application Support/Microsoft Edge Canary"_s,
+    u"~/Library/Application Support/Microsoft Edge Dev"_s,
+    u"~/Library/Application Support/net.imput.helium"_s,
+    u"~/Library/Application Support/Vivaldi"_s,
+    u"~/Library/Application Support/Vivaldi Snapshot"_s,
+};
+
+void registerChromiumManifests(const QJsonDocument &document)
+{
+    for (const auto &directory : CHROMIUM_DIRECTORIES)
+    {
+        if (!QDir(QDir::homePath() % QStringView{directory}.sliced(1)).exists())
+        {
+            continue;
+        }
+
+        auto result =
+            writeManifestTo(directory, u"NativeMessagingHosts"_s,
+                            u"com.chatterino.chatterino.json"_s, document);
+        if (!result)
+        {
+            qCDebug(chatterinoNativeMessage)
+                << "Chromium native messaging registration:" << result.error();
+        }
+    }
+}
+#endif
+
 QJsonObject buildBaseDocument()
 {
     return QJsonObject{
@@ -278,6 +318,10 @@ bool registerNmHost(const Paths &paths)
             << "Chrome native messaging registration:"
             << chromeRegistered.error();
     }
+#ifdef Q_OS_MACOS
+    registerChromiumManifests(chromeManifest);
+#endif
+
     const auto firefoxRegistered =
         registerNmManifest(paths, FIREFOX, firefoxManifest);
     if (!firefoxRegistered)
