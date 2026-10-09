@@ -18,6 +18,13 @@ QString getMacOSDefaultBrowserPath();
 /// that don't overlap the browser stay visible.
 void keepMacOSWindowsBehindOverlay(WId overlayWinId);
 
+/// Shows Chatterino in the Dock and the app switcher, or only in the menu bar
+void setMacOSDockIconVisible(bool visible);
+
+/// Makes Chatterino the active app, which it doesn't become on its own while
+/// it's not in the Dock
+void activateMacOSApp();
+
 /// Process ID of the app that's in the front right now
 qint64 getMacOSFrontmostAppPid();
 
