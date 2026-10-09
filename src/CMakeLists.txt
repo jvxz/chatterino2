@@ -531,6 +531,8 @@ set(SOURCE_FILES
         singletons/ImageUploader.hpp
         singletons/Logging.cpp
         singletons/Logging.hpp
+        singletons/MultiPovSync.cpp
+        singletons/MultiPovSync.hpp
         singletons/NativeMessaging.cpp
         singletons/NativeMessaging.hpp
         singletons/Paths.cpp
@@ -665,6 +667,8 @@ set(SOURCE_FILES
         widgets/OverlayWindow.hpp
         widgets/PluginRepl.cpp
         widgets/PluginRepl.hpp
+        widgets/PovOverlayWindow.cpp
+        widgets/PovOverlayWindow.hpp
         widgets/Scrollbar.cpp
         widgets/Scrollbar.hpp
         widgets/TooltipEntryWidget.cpp
