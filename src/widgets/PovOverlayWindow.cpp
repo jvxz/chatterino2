@@ -5,6 +5,7 @@
 #include "widgets/PovOverlayWindow.hpp"
 
 #include "common/Channel.hpp"
+#include "common/QLogging.hpp"
 #include "widgets/splits/Split.hpp"
 
 #ifdef Q_OS_MACOS
@@ -72,9 +73,16 @@ void PovOverlayWindow::showAt(const QRect &panel, const ChannelPtr &channel)
 void PovOverlayWindow::hideIfCovered()
 {
 #ifdef Q_OS_MACOS
-    if (this->isVisible() &&
-        isMacOSOverlayCovered(this->winId(), this->browserWindow_))
+    if (!this->isVisible())
     {
+        return;
+    }
+    const auto cover =
+        getMacOSOverlayCover(this->winId(), this->browserWindow_);
+    if (!cover.isEmpty())
+    {
+        qCDebug(chatterinoNativeMessage)
+            << "Hiding the overlay, covered by" << cover;
         this->hide();
     }
 #else
@@ -111,6 +119,9 @@ void PovOverlayWindow::changeEvent(QEvent *event)
             active->frameGeometry().intersects(this->geometry()) &&
             !this->geometry().contains(QCursor::pos()))
         {
+            qCDebug(chatterinoNativeMessage)
+                << "Hiding the overlay, Chatterino window"
+                << active->windowTitle() << "is in front of it";
             this->hide();
         }
     }

@@ -22,9 +22,10 @@ void keepMacOSWindowsBehindOverlay(WId overlayWinId);
 /// (`overlayWinId`), i.e. the browser's, or 0
 qint64 getMacOSWindowUnder(WId overlayWinId);
 
-/// Whether a window of another app (than Chatterino) is in front of `window`
-/// (from getMacOSWindowUnder) over the overlay window, or `window` is gone
-bool isMacOSOverlayCovered(WId overlayWinId, qint64 window);
+/// The window of another app (than Chatterino) in front of `window` (from
+/// getMacOSWindowUnder) over the overlay window, described for logs. Empty
+/// when nothing covers `window` there.
+QString getMacOSOverlayCover(WId overlayWinId, qint64 window);
 
 /// Calls `callback` with the process ID of every app that comes to the front,
 /// including Chatterino itself

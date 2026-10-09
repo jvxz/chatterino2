@@ -43,10 +43,10 @@ CGRect toCGRect(NSRect frame)
                       frame.size.width, frame.size.height);
 }
 
-/// Calls `visit` with the number of every visible, regular window of other
-/// apps over `area` (CoreGraphics coordinates), front to back, until it
+/// Calls `visit` with the CoreGraphics info of every visible, regular window of
+/// other apps over `area` (CoreGraphics coordinates), front to back, until it
 /// returns NO
-void forEachWindowOver(CGRect area, BOOL (^visit)(NSInteger))
+void forEachWindowOver(CGRect area, BOOL (^visit)(NSDictionary *))
 {
     NSArray *windows = CFBridgingRelease(CGWindowListCopyWindowInfo(
         kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements,
@@ -66,11 +66,16 @@ void forEachWindowOver(CGRect area, BOOL (^visit)(NSInteger))
                 (__bridge CFDictionaryRef)info[(__bridge id)kCGWindowBounds],
                 &bounds) &&
             CGRectIntersectsRect(bounds, area) &&
-            !visit([info[(__bridge id)kCGWindowNumber] integerValue]))
+            !visit(info))
         {
             return;
         }
     }
+}
+
+NSInteger windowNumberOf(NSDictionary *info)
+{
+    return [info[(__bridge id)kCGWindowNumber] integerValue];
 }
 
 /// Number of the frontmost window of another app under the middle of
@@ -82,8 +87,8 @@ NSInteger windowNumberUnder(NSWindow *overlay)
 
     __block NSInteger found = 0;
     forEachWindowOver(CGRectMake(middle.x, middle.y, 1, 1),
-                      ^BOOL(NSInteger number) {
-                        found = number;
+                      ^BOOL(NSDictionary *info) {
+                        found = windowNumberOf(info);
                         return NO;
                       });
     return found;
@@ -136,21 +141,33 @@ qint64 getMacOSWindowUnder(WId overlayWinId)
     return overlay == nil ? 0 : windowNumberUnder(overlay);
 }
 
-bool isMacOSOverlayCovered(WId overlayWinId, qint64 window)
+QString getMacOSOverlayCover(WId overlayWinId, qint64 window)
 {
     NSWindow *overlay = windowOf(overlayWinId);
-    if (overlay == nil || window == 0)
+    if (overlay == nil)
     {
-        return true;
+        return QStringLiteral("unknown, the overlay has no window");
     }
 
-    // Covered when another window comes before `window`, or `window` is gone
-    __block bool covered = true;
-    forEachWindowOver(toCGRect(overlay.frame), ^BOOL(NSInteger number) {
-      covered = number != window;
+    // The frontmost window over the overlay is either `window` or its cover
+    __block QString cover =
+        QStringLiteral("nothing, the browser window is gone");
+    forEachWindowOver(toCGRect(overlay.frame), ^BOOL(NSDictionary *info) {
+      if (windowNumberOf(info) == window)
+      {
+          cover.clear();
+      }
+      else
+      {
+          cover = QString::fromNSString([NSString
+              stringWithFormat:@"%@ (pid %@, window %@)",
+                               info[(__bridge id)kCGWindowOwnerName],
+                               info[(__bridge id)kCGWindowOwnerPID],
+                               info[(__bridge id)kCGWindowNumber]]);
+      }
       return NO;
     });
-    return covered;
+    return cover;
 }
 
 void onMacOSAppActivated(std::function<void(qint64 pid)> callback)
