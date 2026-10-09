@@ -12,7 +12,9 @@
 #endif
 
 #include <QApplication>
+#include <QCursor>
 #include <QEvent>
+#include <QPointer>
 
 namespace chatterino {
 
@@ -31,16 +33,29 @@ PovOverlayWindow::PovOverlayWindow()
     // Clicking the overlay activates Chatterino, which brings its other
     // windows up in front of the browser
     keepMacOSWindowsBehindOverlay(this->winId());
-#endif
 
-    this->hideTimer_.setSingleShot(true);
-    this->hideTimer_.setInterval(250);
-    QObject::connect(&this->hideTimer_, &QTimer::timeout, this, &QWidget::hide);
+    // The browser only notices other apps coming to the front while it's
+    // focused, not while the overlay is
+    onMacOSAppActivated([self = QPointer<PovOverlayWindow>(this)](qint64 pid) {
+        if (self && pid != QCoreApplication::applicationPid() &&
+            pid != self->browserPid_)
+        {
+            self->hide();
+        }
+    });
+#endif
 }
 
 void PovOverlayWindow::showAt(const QRect &panel, const ChannelPtr &channel)
 {
-    this->hideTimer_.stop();
+#ifdef Q_OS_MACOS
+    // The extension only shows the overlay while the browser is focused
+    if (auto pid = getMacOSFrontmostAppPid();
+        pid != QCoreApplication::applicationPid())
+    {
+        this->browserPid_ = pid;
+    }
+#endif
 
     if (this->split_->getChannel() != channel)
     {
@@ -69,16 +84,23 @@ void PovOverlayWindow::requestHide()
     {
         return;
     }
-    this->hideTimer_.stop();
     this->hide();
 }
 
 void PovOverlayWindow::changeEvent(QEvent *event)
 {
-    if (event->type() == QEvent::ActivationChange && !this->isFocused() &&
-        this->isVisible())
+    // Another Chatterino window was clicked. When another app took the focus,
+    // there's no active window, and the app activation handler decides. The
+    // cursor check skips the activation that clicking the overlay itself can
+    // briefly give to another window.
+    if (event->type() == QEvent::ActivationChange && this->isVisible())
     {
-        this->hideTimer_.start();
+        auto *active = QApplication::activeWindow();
+        if (active != nullptr && active != this &&
+            !this->geometry().contains(QCursor::pos()))
+        {
+            this->hide();
+        }
     }
     QWidget::changeEvent(event);
 }

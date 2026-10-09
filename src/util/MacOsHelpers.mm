@@ -104,6 +104,24 @@ void keepMacOSWindowsBehindOverlay(WId overlayWinId)
                   }
                 }];
 }
+
+qint64 getMacOSFrontmostAppPid()
+{
+    return NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier;
+}
+
+void onMacOSAppActivated(std::function<void(qint64 pid)> callback)
+{
+    [NSWorkspace.sharedWorkspace.notificationCenter
+        addObserverForName:NSWorkspaceDidActivateApplicationNotification
+                    object:nil
+                     queue:NSOperationQueue.mainQueue
+                usingBlock:^(NSNotification *notification) {
+                  NSRunningApplication *app =
+                      notification.userInfo[NSWorkspaceApplicationKey];
+                  callback(app.processIdentifier);
+                }];
+}
 #endif
 
 }  // namespace chatterino

@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <QTimer>
 #include <QWidget>
 
 #include <memory>
@@ -45,9 +44,9 @@ private:
 
     Split *split_;
 
-    /// Hides the window shortly after it loses focus, unless the browser
-    /// shows it again in the meantime (focus went back to the browser).
-    QTimer hideTimer_;
+    /// Process ID of the browser the overlay was last shown over. The overlay
+    /// hides when any other app comes to the front.
+    qint64 browserPid_ = 0;
 };
 
 }  // namespace chatterino
