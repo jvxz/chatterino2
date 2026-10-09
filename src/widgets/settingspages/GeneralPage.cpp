@@ -158,6 +158,16 @@ void GeneralPage::initLayout(GeneralPageView &layout)
             ->addTo(layout);
     }
 
+#ifdef Q_OS_MACOS
+    SettingWidget::checkbox(
+        "Show Chatterino in the menu bar instead of the Dock", s.menuBarMode)
+        ->setTooltip("Closing the main window only hides it, and Chatterino "
+                     "starts with it hidden. Open it, the settings, or quit "
+                     "from the menu bar icon. The browser overlays keep "
+                     "working.")
+        ->addTo(layout);
+#endif
+
     layout.addDropdown<float>(
         "Zoom", ZOOM_LEVELS, s.uiScale,
         [](auto val) {
