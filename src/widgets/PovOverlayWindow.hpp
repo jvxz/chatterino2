@@ -40,6 +40,9 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
+    /// Whether the overlay has keyboard focus, i.e. it's being used
+    bool isFocused() const;
+
     Split *split_;
 
     /// Hides the window shortly after it loses focus, unless the browser

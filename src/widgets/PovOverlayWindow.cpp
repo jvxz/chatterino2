@@ -11,6 +11,7 @@
 #    include "util/MacOsHelpers.h"
 #endif
 
+#include <QApplication>
 #include <QEvent>
 
 namespace chatterino {
@@ -55,9 +56,16 @@ void PovOverlayWindow::showAt(const QRect &panel, const ChannelPtr &channel)
     }
 }
 
+bool PovOverlayWindow::isFocused() const
+{
+    // Not isActiveWindow(): on macOS that's always true for a Qt::Tool window
+    // without a parent, which kept the overlay from ever hiding
+    return QApplication::activeWindow() == this;
+}
+
 void PovOverlayWindow::requestHide()
 {
-    if (this->isActiveWindow())
+    if (this->isFocused())
     {
         return;
     }
@@ -67,7 +75,7 @@ void PovOverlayWindow::requestHide()
 
 void PovOverlayWindow::changeEvent(QEvent *event)
 {
-    if (event->type() == QEvent::ActivationChange && !this->isActiveWindow() &&
+    if (event->type() == QEvent::ActivationChange && !this->isFocused() &&
         this->isVisible())
     {
         this->hideTimer_.start();
