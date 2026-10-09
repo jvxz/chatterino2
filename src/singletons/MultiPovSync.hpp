@@ -42,6 +42,10 @@ void showOverlay(const QString &channel, const QRect &rect);
 /// thread.
 void hideOverlay();
 
+/// Hides the overlay window if another window now covers the browser window
+/// it's over. Must be called from the GUI thread.
+void hideOverlayIfCovered();
+
 /// File the overlay's chat background color (#rrggbb) is written to, so the
 /// browser extension host can pass it on to the page under the overlay.
 QString overlayBackgroundPath(const Paths &paths);

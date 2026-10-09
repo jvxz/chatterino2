@@ -229,20 +229,26 @@
     }
   }
 
-  function hideOverlay() {
+  /** @param {string} reason for Chatterino's logs */
+  function hideOverlay(reason) {
     if (lastOverlay === '') return;
     lastOverlay = '';
-    post({ type: 'overlay', pov: null });
+    post({ type: 'overlay', pov: null, reason });
+  }
+
+  /** @returns {string | null} why the overlay can't be shown right now */
+  function hiddenReason() {
+    if (!isMultiPov()) return 'not on the Multi-POV page';
+    if (document.visibilityState !== 'visible') return 'tab hidden';
+    if (document.fullscreenElement) return 'page fullscreen';
+    return null;
   }
 
   function update(force = false) {
-    if (
-      !isMultiPov() ||
-      document.visibilityState !== 'visible' ||
-      document.fullscreenElement
-    ) {
+    const reason = hiddenReason();
+    if (reason) {
       followPanel(null);
-      hideOverlay();
+      hideOverlay(reason);
       return;
     }
 
@@ -259,7 +265,7 @@
 
     followPanel(shown?.frame ?? null);
     if (!shown) {
-      hideOverlay();
+      hideOverlay('no chat on the page');
       return;
     }
 
@@ -291,7 +297,7 @@
   // again right away.
   document.addEventListener('visibilitychange', () => update(true));
   window.addEventListener('focus', () => update(true));
-  window.addEventListener('pagehide', hideOverlay);
+  window.addEventListener('pagehide', () => hideOverlay('page closed'));
 
   update(true);
 })();

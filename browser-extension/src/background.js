@@ -378,7 +378,7 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
       });
       break;
     case 'overlay':
-      updateOverlay(sender.tab, message);
+      queueOverlay(() => updateOverlay(sender.tab, message));
       break;
   }
 });
@@ -498,25 +498,54 @@ function postOverlay(data) {
   }
 }
 
-/** Hides the overlay, and forgets which tab it was for */
-async function hideOverlay() {
+// Overlay updates run one at a time, so a hide and a show from two tabs can't
+// interleave around the overlay tab's id in storage
+let overlayQueue = Promise.resolve();
+
+/** @param {() => Promise<void>} task */
+function queueOverlay(task) {
+  overlayQueue = overlayQueue.then(task).catch(console.warn);
+}
+
+/** @returns {Promise<number | undefined>} the tab the overlay is over */
+async function getOverlayTabId() {
+  const { overlayTabId } = await chrome.storage.session
+    .get('overlayTabId')
+    .catch(() => ({}));
+  return overlayTabId;
+}
+
+/**
+ * Hides the overlay, and forgets which tab it was for
+ * @param {string} reason for Chatterino's logs
+ */
+async function hideOverlay(reason) {
   await chrome.storage.session.remove('overlayTabId').catch(() => {});
-  postOverlay({});
+  postOverlay({ reason });
 }
 
 /**
  * @param {chrome.tabs.Tab} tab
- * @param {{ pov: string | null, rect?: DOMRectInit, viewport?: object }} message
+ * @param {{ pov: string | null, reason?: string, rect?: DOMRectInit, viewport?: object }} message
  */
 async function updateOverlay(tab, message) {
   if (!message.pov || !tab.active) {
-    await hideOverlay();
+    // Only the tab the overlay is over can hide it. Every lofi tab asks to
+    // hide it when it loads in the background, like when tabs are restored.
+    const overlayTabId = await getOverlayTabId();
+    if (overlayTabId === undefined || overlayTabId === tab.id) {
+      await hideOverlay(
+        message.pov ? 'tab in the background' : (message.reason ?? 'unknown'),
+      );
+    }
     return;
   }
 
+  // While another app is in front, Chatterino decides whether the overlay
+  // stays (the browser can be on another screen), and it can't be placed
+  // reliably anyway
   const window = await chrome.windows.get(tab.windowId);
   if (!window.focused) {
-    await hideOverlay();
     return;
   }
 
@@ -540,30 +569,31 @@ async function updateOverlay(tab, message) {
   });
 }
 
-// Another app or browser window came to the front. When the browser window is
-// focused again, the page re-sends the overlay on its own.
-chrome.windows.onFocusChanged.addListener(async windowId => {
-  const { overlayTabId } = await chrome.storage.session
-    .get('overlayTabId')
-    .catch(() => ({}));
-  if (overlayTabId === undefined) return;
+// Another browser window came to the front. Chatterino hides the overlay if
+// that window covers it. Other apps coming to the front (WINDOW_ID_NONE) are
+// handled by Chatterino itself. When the overlay's window is focused again,
+// the page re-sends the overlay on its own.
+chrome.windows.onFocusChanged.addListener(windowId => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
 
-  if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    await hideOverlay();
-    return;
-  }
-  const tab = await chrome.tabs.get(overlayTabId).catch(() => null);
-  if (!tab || tab.windowId !== windowId) {
-    await hideOverlay();
-  }
+  queueOverlay(async () => {
+    const overlayTabId = await getOverlayTabId();
+    if (overlayTabId === undefined) return;
+
+    const tab = await chrome.tabs.get(overlayTabId).catch(() => null);
+    if (!tab) {
+      await hideOverlay('tab closed');
+    } else if (tab.windowId !== windowId) {
+      postOverlay({ check: true });
+    }
+  });
 });
 
 // The page can't always report this itself
-chrome.tabs.onRemoved.addListener(async tabId => {
-  const { overlayTabId } = await chrome.storage.session
-    .get('overlayTabId')
-    .catch(() => ({}));
-  if (overlayTabId === tabId) {
-    await hideOverlay();
-  }
+chrome.tabs.onRemoved.addListener(tabId => {
+  queueOverlay(async () => {
+    if ((await getOverlayTabId()) === tabId) {
+      await hideOverlay('tab closed');
+    }
+  });
 });

@@ -213,6 +213,16 @@ void hideOverlay()
     }
 }
 
+void hideOverlayIfCovered()
+{
+    assertInGuiThread();
+
+    if (auto &window = overlay(); !window.isNull())
+    {
+        window->hideIfCovered();
+    }
+}
+
 QString overlayBackgroundPath(const Paths &paths)
 {
     return paths.miscDirectory + QStringLiteral("/lofi-overlay-background");
