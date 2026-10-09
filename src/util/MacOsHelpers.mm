@@ -3,18 +3,6 @@
 #include <AppKit/AppKit.h>
 #include <QUrl>
 
-/// Borderless windows can't become key by default, which they need to take
-/// typing.
-@interface ChatterinoOverlayPanel : NSPanel
-@end
-
-@implementation ChatterinoOverlayPanel
-- (BOOL)canBecomeKeyWindow
-{
-    return YES;
-}
-@end
-
 void chatterinoSetMacOsActivationPolicyProhibited()
 {
     [[NSApplication sharedApplication] setActivationPolicy:NSApplicationActivationPolicyProhibited];
@@ -46,54 +34,75 @@ QString getMacOSDefaultBrowserPath()
 
 namespace {
 
-NSWindow *overlayPanel(WId contentView)
+/// Number of the frontmost window of another app under the middle of
+/// `overlay`, or 0
+NSInteger windowNumberUnder(NSWindow *overlay)
 {
-    return ((__bridge NSView *)reinterpret_cast<void *>(contentView)).window;
+    NSArray *windows = CFBridgingRelease(CGWindowListCopyWindowInfo(
+        kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements,
+        kCGNullWindowID));
+
+    // CoreGraphics' origin is the top left corner of the primary screen
+    const CGFloat primaryHeight = NSScreen.screens.firstObject.frame.size.height;
+    const NSRect frame = overlay.frame;
+    const CGPoint middle =
+        CGPointMake(NSMidX(frame), primaryHeight - NSMidY(frame));
+    const int ownPid = NSProcessInfo.processInfo.processIdentifier;
+
+    // Front to back
+    for (NSDictionary *info in windows)
+    {
+        if ([info[(__bridge id)kCGWindowOwnerPID] intValue] == ownPid ||
+            [info[(__bridge id)kCGWindowLayer] intValue] != 0)
+        {
+            continue;
+        }
+        CGRect bounds;
+        if (CGRectMakeWithDictionaryRepresentation(
+                (__bridge CFDictionaryRef)info[(__bridge id)kCGWindowBounds],
+                &bounds) &&
+            CGRectContainsPoint(bounds, middle))
+        {
+            return [info[(__bridge id)kCGWindowNumber] integerValue];
+        }
+    }
+    return 0;
 }
 
 }  // namespace
 
-WId createMacOSOverlayPanel()
+void keepMacOSWindowsBehindOverlay(WId overlayWinId)
 {
-    // Lives as long as the overlay, which lives as long as the app
-    ChatterinoOverlayPanel *panel = [[ChatterinoOverlayPanel alloc]
-        initWithContentRect:NSMakeRect(0, 0, 300, 600)
-                  styleMask:NSWindowStyleMaskBorderless |
-                            NSWindowStyleMaskNonactivatingPanel
-                    backing:NSBackingStoreBuffered
-                      defer:NO];
-    panel.floatingPanel = YES;
-    panel.hidesOnDeactivate = NO;
-    panel.releasedWhenClosed = NO;
-    panel.becomesKeyOnlyIfNeeded = NO;
-    panel.collectionBehavior = NSWindowCollectionBehaviorFullScreenAuxiliary |
-                               NSWindowCollectionBehaviorMoveToActiveSpace;
+    NSView *view = (__bridge NSView *)reinterpret_cast<void *>(overlayWinId);
 
-    return reinterpret_cast<WId>((__bridge void *)panel.contentView);
-}
-
-void showMacOSOverlayPanel(WId contentView, const QRect &rect)
-{
-    NSWindow *panel = overlayPanel(contentView);
-
-    // Cocoa's origin is the bottom left corner of the primary screen
-    const CGFloat primaryHeight = NSScreen.screens.firstObject.frame.size.height;
-    const NSRect frame =
-        NSMakeRect(rect.x(), primaryHeight - rect.y() - rect.height(),
-                   rect.width(), rect.height());
-    if (!NSEqualRects(panel.frame, frame))
-    {
-        [panel setFrame:frame display:YES];
-    }
-    if (!panel.visible)
-    {
-        [panel orderFrontRegardless];
-    }
-}
-
-void hideMacOSOverlayPanel(WId contentView)
-{
-    [overlayPanel(contentView) orderOut:nil];
+    // Qt reorders the windows when the app is about to become active, so this
+    // runs after it
+    [NSNotificationCenter.defaultCenter
+        addObserverForName:NSApplicationDidBecomeActiveNotification
+                    object:nil
+                     queue:NSOperationQueue.mainQueue
+                usingBlock:^(NSNotification *) {
+                  NSWindow *overlay = view.window;
+                  // Only when the overlay was clicked
+                  if (overlay == nil || !overlay.visible ||
+                      !NSMouseInRect(NSEvent.mouseLocation, overlay.frame, NO))
+                  {
+                      return;
+                  }
+                  const NSInteger browser = windowNumberUnder(overlay);
+                  if (browser == 0)
+                  {
+                      return;
+                  }
+                  for (NSWindow *window in NSApp.orderedWindows)
+                  {
+                      if (window != overlay && window.visible &&
+                          window.level == NSNormalWindowLevel)
+                      {
+                          [window orderWindow:NSWindowBelow relativeTo:browser];
+                      }
+                  }
+                }];
 }
 #endif
 

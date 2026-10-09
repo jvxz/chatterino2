@@ -22,10 +22,6 @@ using ChannelPtr = std::shared_ptr<Channel>;
 /// works on macOS too: the browser extension sends the panel's position in
 /// screen coordinates whenever it changes. It always matches the panel; the
 /// extension adds a handle to resize the panel on the page.
-///
-/// On macOS, the widget is embedded in a native non-activating panel, so that
-/// using it doesn't activate Chatterino and bring its other windows up in front
-/// of the browser.
 class PovOverlayWindow : public QWidget
 {
 public:
@@ -44,14 +40,7 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
-    void hideOverlay();
-
     Split *split_;
-
-#ifdef Q_OS_MACOS
-    /// Content view of the native panel this widget is embedded in
-    WId macPanel_;
-#endif
 
     /// Hides the window shortly after it loses focus, unless the browser
     /// shows it again in the meantime (focus went back to the browser).
