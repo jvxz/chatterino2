@@ -596,10 +596,20 @@ void NativeMessagingServer::ReceiverThread::handleOverlay(
     const QJsonObject &root)
 {
     // Structure:
-    // { action: 'overlay', pov?: string, rect?: { x, y, width, height } }
+    // { action: 'overlay', pov?: string, rect?: { x, y, width, height },
+    //   check?: true }
     // pov is the lofi-nopixel.com slug of the chat shown in the browser, rect
     // is that chat's position on screen in logical pixels. Without a pov or a
-    // rect, the overlay is hidden.
+    // rect, the overlay is hidden. With check, another browser window was
+    // focused, and the overlay only hides if that window covers it.
+    if (root["check"_L1].toBool())
+    {
+        postToThread([] {
+            multipov::hideOverlayIfCovered();
+        });
+        return;
+    }
+
     const auto channel =
         multipov::twitchChannelFromPov(root["pov"_L1].toString());
     const auto rectObject = root["rect"_L1].toObject();

@@ -15,6 +15,7 @@
 #include <QCursor>
 #include <QEvent>
 #include <QPointer>
+#include <QTimer>
 
 namespace chatterino {
 
@@ -34,13 +35,14 @@ PovOverlayWindow::PovOverlayWindow()
     // windows up in front of the browser
     keepMacOSWindowsBehindOverlay(this->winId());
 
-    // The browser only notices other apps coming to the front while it's
-    // focused, not while the overlay is
+    // Another app's window may now be in front of the browser. Checked a
+    // moment later, once that app's windows have come to the front.
     onMacOSAppActivated([self = QPointer<PovOverlayWindow>(this)](qint64 pid) {
-        if (self && pid != QCoreApplication::applicationPid() &&
-            pid != self->browserPid_)
+        if (self && pid != QCoreApplication::applicationPid())
         {
-            self->hide();
+            QTimer::singleShot(100, self.data(), [self] {
+                self->hideIfCovered();
+            });
         }
     });
 #endif
@@ -48,15 +50,6 @@ PovOverlayWindow::PovOverlayWindow()
 
 void PovOverlayWindow::showAt(const QRect &panel, const ChannelPtr &channel)
 {
-#ifdef Q_OS_MACOS
-    // The extension only shows the overlay while the browser is focused
-    if (auto pid = getMacOSFrontmostAppPid();
-        pid != QCoreApplication::applicationPid())
-    {
-        this->browserPid_ = pid;
-    }
-#endif
-
     if (this->split_->getChannel() != channel)
     {
         this->split_->setChannel(channel);
@@ -68,7 +61,25 @@ void PovOverlayWindow::showAt(const QRect &panel, const ChannelPtr &channel)
     if (!this->isVisible())
     {
         this->show();
+#ifdef Q_OS_MACOS
+        // The extension only shows the overlay while the browser is focused,
+        // so its window is the one right under the overlay
+        this->browserWindow_ = getMacOSWindowUnder(this->winId());
+#endif
     }
+}
+
+void PovOverlayWindow::hideIfCovered()
+{
+#ifdef Q_OS_MACOS
+    if (this->isVisible() &&
+        isMacOSOverlayCovered(this->winId(), this->browserWindow_))
+    {
+        this->hide();
+    }
+#else
+    this->requestHide();
+#endif
 }
 
 bool PovOverlayWindow::isFocused() const
@@ -89,14 +100,15 @@ void PovOverlayWindow::requestHide()
 
 void PovOverlayWindow::changeEvent(QEvent *event)
 {
-    // Another Chatterino window was clicked. When another app took the focus,
-    // there's no active window, and the app activation handler decides. The
-    // cursor check skips the activation that clicking the overlay itself can
-    // briefly give to another window.
+    // Another Chatterino window over the overlay was clicked. When another
+    // app took the focus, there's no active window, and the app activation
+    // handler decides. The cursor check skips the activation that clicking the
+    // overlay itself can briefly give to another window.
     if (event->type() == QEvent::ActivationChange && this->isVisible())
     {
         auto *active = QApplication::activeWindow();
         if (active != nullptr && active != this &&
+            active->frameGeometry().intersects(this->geometry()) &&
             !this->geometry().contains(QCursor::pos()))
         {
             this->hide();

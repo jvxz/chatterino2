@@ -34,26 +34,30 @@ QString getMacOSDefaultBrowserPath()
 
 namespace {
 
-/// Number of the frontmost window of another app under the middle of
-/// `overlay`, or 0
-NSInteger windowNumberUnder(NSWindow *overlay)
+/// `frame` (Cocoa coordinates) in CoreGraphics coordinates, whose origin is
+/// the top left corner of the primary screen
+CGRect toCGRect(NSRect frame)
+{
+    const CGFloat primaryHeight = NSScreen.screens.firstObject.frame.size.height;
+    return CGRectMake(frame.origin.x, primaryHeight - NSMaxY(frame),
+                      frame.size.width, frame.size.height);
+}
+
+/// Calls `visit` with the number of every visible, regular window of other
+/// apps over `area` (CoreGraphics coordinates), front to back, until it
+/// returns NO
+void forEachWindowOver(CGRect area, BOOL (^visit)(NSInteger))
 {
     NSArray *windows = CFBridgingRelease(CGWindowListCopyWindowInfo(
         kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements,
         kCGNullWindowID));
-
-    // CoreGraphics' origin is the top left corner of the primary screen
-    const CGFloat primaryHeight = NSScreen.screens.firstObject.frame.size.height;
-    const NSRect frame = overlay.frame;
-    const CGPoint middle =
-        CGPointMake(NSMidX(frame), primaryHeight - NSMidY(frame));
     const int ownPid = NSProcessInfo.processInfo.processIdentifier;
 
-    // Front to back
     for (NSDictionary *info in windows)
     {
         if ([info[(__bridge id)kCGWindowOwnerPID] intValue] == ownPid ||
-            [info[(__bridge id)kCGWindowLayer] intValue] != 0)
+            [info[(__bridge id)kCGWindowLayer] intValue] != 0 ||
+            [info[(__bridge id)kCGWindowAlpha] doubleValue] <= 0)
         {
             continue;
         }
@@ -61,12 +65,33 @@ NSInteger windowNumberUnder(NSWindow *overlay)
         if (CGRectMakeWithDictionaryRepresentation(
                 (__bridge CFDictionaryRef)info[(__bridge id)kCGWindowBounds],
                 &bounds) &&
-            CGRectContainsPoint(bounds, middle))
+            CGRectIntersectsRect(bounds, area) &&
+            !visit([info[(__bridge id)kCGWindowNumber] integerValue]))
         {
-            return [info[(__bridge id)kCGWindowNumber] integerValue];
+            return;
         }
     }
-    return 0;
+}
+
+/// Number of the frontmost window of another app under the middle of
+/// `overlay`, or 0
+NSInteger windowNumberUnder(NSWindow *overlay)
+{
+    const CGRect frame = toCGRect(overlay.frame);
+    const CGPoint middle = CGPointMake(CGRectGetMidX(frame), CGRectGetMidY(frame));
+
+    __block NSInteger found = 0;
+    forEachWindowOver(CGRectMake(middle.x, middle.y, 1, 1),
+                      ^BOOL(NSInteger number) {
+                        found = number;
+                        return NO;
+                      });
+    return found;
+}
+
+NSWindow *windowOf(WId winId)
+{
+    return ((__bridge NSView *)reinterpret_cast<void *>(winId)).window;
 }
 
 }  // namespace
@@ -105,9 +130,27 @@ void keepMacOSWindowsBehindOverlay(WId overlayWinId)
                 }];
 }
 
-qint64 getMacOSFrontmostAppPid()
+qint64 getMacOSWindowUnder(WId overlayWinId)
 {
-    return NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier;
+    NSWindow *overlay = windowOf(overlayWinId);
+    return overlay == nil ? 0 : windowNumberUnder(overlay);
+}
+
+bool isMacOSOverlayCovered(WId overlayWinId, qint64 window)
+{
+    NSWindow *overlay = windowOf(overlayWinId);
+    if (overlay == nil || window == 0)
+    {
+        return true;
+    }
+
+    // Covered when another window comes before `window`, or `window` is gone
+    __block bool covered = true;
+    forEachWindowOver(toCGRect(overlay.frame), ^BOOL(NSInteger number) {
+      covered = number != window;
+      return NO;
+    });
+    return covered;
 }
 
 void onMacOSAppActivated(std::function<void(qint64 pid)> callback)

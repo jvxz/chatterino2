@@ -514,9 +514,11 @@ async function updateOverlay(tab, message) {
     return;
   }
 
+  // While another app is in front, Chatterino decides whether the overlay
+  // stays (the browser can be on another screen), and it can't be placed
+  // reliably anyway
   const window = await chrome.windows.get(tab.windowId);
   if (!window.focused) {
-    await hideOverlay();
     return;
   }
 
@@ -540,21 +542,23 @@ async function updateOverlay(tab, message) {
   });
 }
 
-// Another app or browser window came to the front. When the browser window is
-// focused again, the page re-sends the overlay on its own.
+// Another browser window came to the front. Chatterino hides the overlay if
+// that window covers it. Other apps coming to the front (WINDOW_ID_NONE) are
+// handled by Chatterino itself. When the overlay's window is focused again,
+// the page re-sends the overlay on its own.
 chrome.windows.onFocusChanged.addListener(async windowId => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+
   const { overlayTabId } = await chrome.storage.session
     .get('overlayTabId')
     .catch(() => ({}));
   if (overlayTabId === undefined) return;
 
-  if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    await hideOverlay();
-    return;
-  }
   const tab = await chrome.tabs.get(overlayTabId).catch(() => null);
-  if (!tab || tab.windowId !== windowId) {
+  if (!tab) {
     await hideOverlay();
+  } else if (tab.windowId !== windowId) {
+    postOverlay({ check: true });
   }
 });
 
