@@ -34,6 +34,11 @@ public:
     /// focus when the overlay is clicked).
     void requestHide();
 
+    /// Hides the window when another app's window is in front of the browser
+    /// window it's over. The overlay stays on top of everything, so it would
+    /// cover that window otherwise.
+    void hideIfCovered();
+
 protected:
     void changeEvent(QEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
@@ -44,9 +49,9 @@ private:
 
     Split *split_;
 
-    /// Process ID of the browser the overlay was last shown over. The overlay
-    /// hides when any other app comes to the front.
-    qint64 browserPid_ = 0;
+    /// macOS window number of the browser window the overlay was last shown
+    /// over
+    qint64 browserWindow_ = 0;
 };
 
 }  // namespace chatterino

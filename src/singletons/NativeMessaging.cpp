@@ -596,10 +596,21 @@ void NativeMessagingServer::ReceiverThread::handleOverlay(
     const QJsonObject &root)
 {
     // Structure:
-    // { action: 'overlay', pov?: string, rect?: { x, y, width, height } }
+    // { action: 'overlay', pov?: string, rect?: { x, y, width, height },
+    //   reason?: string, check?: true }
     // pov is the lofi-nopixel.com slug of the chat shown in the browser, rect
     // is that chat's position on screen in logical pixels. Without a pov or a
-    // rect, the overlay is hidden.
+    // rect, the overlay is hidden, and reason says why (for logs). With check,
+    // another browser window was focused, and the overlay only hides if that
+    // window covers it.
+    if (root["check"_L1].toBool())
+    {
+        postToThread([] {
+            multipov::hideOverlayIfCovered();
+        });
+        return;
+    }
+
     const auto channel =
         multipov::twitchChannelFromPov(root["pov"_L1].toString());
     const auto rectObject = root["rect"_L1].toObject();
@@ -607,6 +618,12 @@ void NativeMessagingServer::ReceiverThread::handleOverlay(
                      qRound(rectObject["y"_L1].toDouble()),
                      qRound(rectObject["width"_L1].toDouble()),
                      qRound(rectObject["height"_L1].toDouble()));
+
+    if (!channel || rect.isEmpty())
+    {
+        qCDebug(chatterinoNativeMessage) << "Browser asks to hide the overlay:"
+                                         << root["reason"_L1].toString();
+    }
 
     postToThread([channel, rect] {
         if (!getSettings()->povOverlayEnabled || !channel || rect.isEmpty())
