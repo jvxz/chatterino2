@@ -135,6 +135,24 @@ void keepMacOSWindowsBehindOverlay(WId overlayWinId)
                 }];
 }
 
+void setMacOSDockIconVisible(bool visible)
+{
+    [NSApp setActivationPolicy:visible ? NSApplicationActivationPolicyRegular
+                                       : NSApplicationActivationPolicyAccessory];
+}
+
+void activateMacOSApp()
+{
+    if (@available(macOS 14, *))
+    {
+        [NSApp activate];
+    }
+    else
+    {
+        [NSApp activateIgnoringOtherApps:YES];
+    }
+}
+
 qint64 getMacOSWindowUnder(WId overlayWinId)
 {
     NSWindow *overlay = windowOf(overlayWinId);

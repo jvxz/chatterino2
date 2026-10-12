@@ -877,6 +877,9 @@ public:
     BoolSetting multiPovSyncRaiseWindow{"/misc/extension/multiPov/raiseWindow",
                                         false};
 
+    /// macOS: an icon in the menu bar instead of the Dock, see MenuBarIcon
+    BoolSetting menuBarMode{"/misc/macos/menuBarMode", false};
+
 #ifndef Q_OS_WIN
     QStringSetting customNativeMessagingManifestPath{
         "/misc/extension/customManifestPath",
