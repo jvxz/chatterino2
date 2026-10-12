@@ -15,6 +15,13 @@
   let useOverlay = false;
   let lastOverlay = null;
 
+  // Twitch has no way to resize its chat column, so (with the overlay) a handle
+  // on its left edge does, see chat-resize.js.
+  const resizer = createChatResizer({
+    widthKey: 'twitchChatWidth',
+    onResize: () => queryChatRect(),
+  });
+
   const ignoredPages = {
     settings: true,
     payments: true,
@@ -86,7 +93,7 @@
 
       if (x != undefined && x.children.length >= 1) {
         x.children[0].innerHTML =
-          '<div style="width: 340px; height: 100%; justify-content: center; display: flex; flex-direction: column; text-align: center; color: #999; user-select: none; background: #222;"></div>';
+          '<div style="width: 100%; height: 100%; justify-content: center; display: flex; flex-direction: column; text-align: center; color: #999; user-select: none; background: #222;"></div>';
 
         errorDiv = x.children[0].children[0];
         updateErrors();
@@ -234,6 +241,7 @@
         document.visibilityState !== 'visible' ||
         document.fullscreenElement != null
       ) {
+        resizer.follow(null);
         hideOverlay('no chat to cover');
         return;
       }
@@ -241,10 +249,13 @@
       const rect = element.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) {
         // the chat column is collapsed
+        resizer.follow(null);
         hideOverlay('chat collapsed');
         return;
       }
-      sendOverlay(rect);
+      resizer.follow(element);
+      // Following can resize the column
+      sendOverlay(element.getBoundingClientRect());
       return;
     }
 
