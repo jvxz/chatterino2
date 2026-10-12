@@ -9,6 +9,12 @@
 
   let showingChat = false;
 
+  // Outside of Windows, Chatterino can't attach to the browser window, so it
+  // sits on top of the chat as an overlay, like on lofi-nopixel.com. The page
+  // reports where the chat is on screen, see lofi.js.
+  let useOverlay = false;
+  let lastOverlay = null;
+
   const ignoredPages = {
     settings: true,
     payments: true,
@@ -180,8 +186,68 @@
     return 0;
   }
 
+  /** @param {string} reason for Chatterino's logs */
+  function hideOverlay(reason) {
+    if (lastOverlay === '') return;
+    lastOverlay = '';
+    try {
+      chrome.runtime.sendMessage({ type: 'overlay', pov: null, reason });
+    } catch {
+      errors.sendMessage = true;
+      updateErrors();
+    }
+  }
+
+  /** @param {DOMRect} rect the chat's position in the page */
+  function sendOverlay(rect) {
+    const overlay = {
+      type: 'overlay',
+      pov: matchChannelName(window.location.href),
+      rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      viewport: {
+        screenX: window.screenX,
+        screenY: window.screenY,
+        outerWidth: window.outerWidth,
+        outerHeight: window.outerHeight,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+      },
+    };
+    const key = JSON.stringify(overlay);
+    if (key === lastOverlay) return;
+    lastOverlay = key;
+    try {
+      chrome.runtime.sendMessage(overlay);
+    } catch {
+      errors.sendMessage = true;
+      updateErrors();
+    }
+  }
+
   // query the rect of the chat
   function queryChatRect() {
+    if (useOverlay) {
+      const element = showingChat && findChatDiv();
+      if (
+        !settings.replaceTwitchChat ||
+        !element ||
+        document.visibilityState !== 'visible' ||
+        document.fullscreenElement != null
+      ) {
+        hideOverlay('no chat to cover');
+        return;
+      }
+
+      const rect = element.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) {
+        // the chat column is collapsed
+        hideOverlay('chat collapsed');
+        return;
+      }
+      sendOverlay(rect);
+      return;
+    }
+
     if (!showingChat) {
       return;
     }
@@ -230,13 +296,6 @@
   function updateErrors() {
     if (!errorDiv) return;
 
-    if (errors.osUnsupported) {
-      errorDiv.innerHTML =
-        'The Chatterino Native Host browser extension currently only works on Windows.';
-
-      return;
-    }
-
     let closeButton =
       '<div onclick="document.getElementsByClassName(`right-column__toggle-visibility`)[0].children[0].children[0].click()" style="padding:5px; left: -30px; width: 30px; height: 30px; background: #222;z-index: 100;cursor: pointer;top: 10px;position: absolute;transform: rotateZ(180deg);color: white;"><svg class="tw-icon__svg" width="100%" height="100%" version="1.1" viewBox="0 0 20 20" x="0px" y="0px"><g><path fill="#bbbbbb" d="M16 16V4h2v12h-2zM6 9l2.501-2.5-1.5-1.5-5 5 5 5 1.5-1.5-2.5-2.5h8V9H6z"></path></g></svg></div>';
 
@@ -284,7 +343,9 @@
       // Available OS string are documented here:
       // https://developer.chrome.com/docs/extensions/reference/runtime/#type-PlatformOs
       if (os !== 'win') {
-        errors.osUnsupported = true;
+        useOverlay = true;
+        // Moving the browser window doesn't fire any event in the page
+        setInterval(queryChatRect, 100);
       }
 
       updateErrors();
@@ -301,6 +362,10 @@
     setTimeout(queryChatRect, 475);
   });
   window.addEventListener('focus', queryChatRect);
+  document.addEventListener('visibilitychange', queryChatRect);
+  window.addEventListener('pagehide', () => {
+    if (useOverlay) hideOverlay('page closed');
+  });
   window.addEventListener('mouseup', () => setTimeout(queryChatRect, 10));
 
   let path = location.pathname;
