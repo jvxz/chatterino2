@@ -15,6 +15,13 @@
   let useOverlay = false;
   let lastOverlay = null;
 
+  // Twitch has no way to resize its chat column either, so a handle on its
+  // left edge does, see resize-handle.js. Only used for the overlay.
+  const resizer = createChatResizer({
+    storageKey: 'twitchChatWidth',
+    onResize: () => queryChatRect(),
+  });
+
   const ignoredPages = {
     settings: true,
     payments: true,
@@ -224,6 +231,21 @@
     }
   }
 
+  /**
+   * Whether Twitch has collapsed the chat column. A column the handle has
+   * widened keeps its width, so this can't only look at the chat's size.
+   * @param {HTMLElement} chat
+   */
+  function isColumnCollapsed(chat) {
+    const panel = resizer.panel;
+    if (!panel) return false;
+    for (let el = chat; el; el = el.parentElement) {
+      if (/collapsed/i.test(el.className)) return true;
+      if (el === panel) break;
+    }
+    return false;
+  }
+
   // query the rect of the chat
   function queryChatRect() {
     if (useOverlay) {
@@ -234,13 +256,21 @@
         document.visibilityState !== 'visible' ||
         document.fullscreenElement != null
       ) {
+        resizer.follow(null);
         hideOverlay('no chat to cover');
         return;
       }
 
       const rect = element.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) {
-        // the chat column is collapsed
+      const collapsed =
+        rect.width === 0 || rect.height === 0 || isColumnCollapsed(element);
+      // Only the column beside the video is resized. Narrow windows put the
+      // chat below it, where a fixed width would stick out.
+      resizer.follow(
+        element,
+        !collapsed && rect.left > window.innerWidth * 0.25,
+      );
+      if (collapsed) {
         hideOverlay('chat collapsed');
         return;
       }
