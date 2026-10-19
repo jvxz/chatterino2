@@ -14,6 +14,7 @@
 #include <QtGlobal>
 
 #include <algorithm>
+#include <cmath>
 
 namespace {
 
@@ -80,17 +81,18 @@ float fontSize(FontStyle style)
         case FontStyle::ChatVeryLarge:
             return 1.4F * chatSize();
 
+        // Rounded, since createFontData truncates to whole points
         case FontStyle::Tiny:
-            return 8;
+            return std::round(8 * PLATFORM_POINT_SCALE);
         case FontStyle::UiMedium:
         case FontStyle::UiMediumBold:
         case FontStyle::UiTabs:
         case FontStyle::EndType:
-            return 9;
+            return std::round(9 * PLATFORM_POINT_SCALE);
     }
 
     assert(false);
-    return 9;
+    return std::round(9 * PLATFORM_POINT_SCALE);
 }
 
 int fontWeight(FontStyle style)

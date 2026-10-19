@@ -9,6 +9,7 @@
 #include "providers/twitch/api/Helix.hpp"
 #include "providers/twitch/TwitchAccount.hpp"
 #include "providers/twitch/TwitchChannel.hpp"
+#include "singletons/Fonts.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
 #include "widgets/buttons/DrawnButton.hpp"
@@ -396,18 +397,18 @@ void PinnedMessageWidget::hideEvent(QHideEvent *event)
 void PinnedMessageWidget::scaleChangedEvent(float newScale)
 {
     QFont headerFont = this->pinnedByLabel_->font();
-    headerFont.setPointSizeF(9.5F * newScale);
+    headerFont.setPointSizeF(9.5F * PLATFORM_POINT_SCALE * newScale);
     this->pinnedByLabel_->setFont(headerFont);
     this->countdownLabel_->setFont(headerFont);
 
     QFont bodyFont = this->messageLabel_->font();
-    bodyFont.setPointSizeF(11.0F * newScale);
+    bodyFont.setPointSizeF(11.0F * PLATFORM_POINT_SCALE * newScale);
     this->messageLabel_->setFont(bodyFont);
     this->messageMaxHeight_ = int(110 * newScale);
     this->updateMessageHeight();
 
     QFont footerFont = this->footerLabel_->font();
-    footerFont.setPointSizeF(9.0F * newScale);
+    footerFont.setPointSizeF(9.0F * PLATFORM_POINT_SCALE * newScale);
     this->footerLabel_->setFont(footerFont);
 }
 

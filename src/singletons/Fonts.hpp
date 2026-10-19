@@ -43,6 +43,14 @@ enum class FontStyle : uint8_t {
     ChatEnd = ChatVeryLarge,
 };
 
+/// macOS lays text out at 72 DPI where Windows uses 96, so a point size picked
+/// for Windows comes out a third too small there.
+#ifdef Q_OS_MACOS
+inline constexpr float PLATFORM_POINT_SCALE = 96.F / 72.F;
+#else
+inline constexpr float PLATFORM_POINT_SCALE = 1.F;
+#endif
+
 /// Stands in for the platform's UI font (San Francisco on macOS) wherever a
 /// font family is stored, since that font's real name is a private one.
 inline const QString SYSTEM_FONT_FAMILY = QStringLiteral("System Font");
