@@ -58,7 +58,8 @@ void MenuBarIcon::apply(bool enabled)
         return;
     }
 
-    delete this->icon_;
+    // Deferred: this can run from the icon's own menu
+    this->icon_->deleteLater();
     this->icon_ = nullptr;
 
     // The main window can't be reached anymore once the icon is gone
@@ -82,7 +83,15 @@ void MenuBarIcon::createIcon()
     QObject::connect(this->icon_, &QObject::destroyed, menu,
                      &QObject::deleteLater);
 
-    auto *toggle = menu->addAction("Show Chatterino");
+    // Without an explicit role, Qt moves actions whose text looks like
+    // "Quit" or "Preferences" into the application menu
+    auto addAction = [menu](const QString &text) {
+        auto *action = menu->addAction(text);
+        action->setMenuRole(QAction::NoRole);
+        return action;
+    };
+
+    auto *toggle = addAction("Show Chatterino");
     QObject::connect(menu, &QMenu::aboutToShow, toggle, [this, toggle] {
         toggle->setText(this->mainWindow_.isVisible() ? "Hide Chatterino"
                                                       : "Show Chatterino");
@@ -98,18 +107,22 @@ void MenuBarIcon::createIcon()
         }
     });
 
-    QObject::connect(
-        menu->addAction("Settings..."), &QAction::triggered, this, [this] {
-            activateMacOSApp();
-            getApp()->getWindows()->showSettingsDialog(&this->mainWindow_);
-        });
+    QObject::connect(addAction("Settings"), &QAction::triggered, this, [this] {
+        activateMacOSApp();
+        getApp()->getWindows()->showSettingsDialog(&this->mainWindow_);
+    });
+
+    QObject::connect(addAction("Show in the Dock instead"), &QAction::triggered,
+                     this, [] {
+                         getSettings()->menuBarMode.setValue(false);
+                     });
 
     menu->addSeparator();
 
     // Closing the main window without a click on its close button quits, see
     // Window::closeEvent
-    QObject::connect(menu->addAction("Quit Chatterino"), &QAction::triggered,
-                     this, [this] {
+    QObject::connect(addAction("Quit Chatterino"), &QAction::triggered, this,
+                     [this] {
                          this->mainWindow_.close();
                      });
 
