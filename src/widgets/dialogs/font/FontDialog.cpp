@@ -4,6 +4,7 @@
 
 #include "widgets/dialogs/font/FontDialog.hpp"
 
+#include "singletons/Fonts.hpp"
 #include "widgets/dialogs/font/FontFamilyWidget.hpp"
 #include "widgets/dialogs/font/FontSizeWidget.hpp"
 #include "widgets/dialogs/font/FontWeightWidget.hpp"
@@ -15,17 +16,20 @@
 
 namespace chatterino {
 
-FontDialog::FontDialog(const QFont &startFont, QWidget *parent)
+FontDialog::FontDialog(const QFont &startFont, double startLetterSpacing,
+                       QWidget *parent)
     : QDialog(parent)
     , preview(new PreviewWidget(startFont))
     , familyW(new FontFamilyWidget(startFont))
     , sizeW(new FontSizeWidget(startFont))
     , weightW(new FontWeightWidget(startFont))
+    , letterSpacingW(new QDoubleSpinBox)
 {
     auto *layout = new QVBoxLayout;
     auto *choiceLayout = new QHBoxLayout;
     auto *choiceSideLayout = new QVBoxLayout;
     auto *buttonLayout = new QHBoxLayout;
+    auto *letterSpacingLayout = new QHBoxLayout;
 
     auto *applyButton = new QPushButton("Apply");
     auto *acceptButton = new QPushButton("Ok");
@@ -45,6 +49,19 @@ FontDialog::FontDialog(const QFont &startFont, QWidget *parent)
 
     choiceSideLayout->addWidget(this->sizeW);
     choiceSideLayout->addWidget(this->weightW);
+    choiceSideLayout->addLayout(letterSpacingLayout);
+
+    letterSpacingLayout->addWidget(new QLabel("Letter spacing"));
+    letterSpacingLayout->addWidget(this->letterSpacingW);
+
+    this->letterSpacingW->setRange(-10.0, 30.0);
+    this->letterSpacingW->setSingleStep(0.5);
+    this->letterSpacingW->setDecimals(1);
+    this->letterSpacingW->setSuffix(" %");
+    this->letterSpacingW->setToolTip(
+        "Extra space after each letter, as a percentage of the font size");
+    this->letterSpacingW->setValue(startLetterSpacing);
+    this->updatePreview();
 
     buttonLayout->addWidget(applyButton);
     buttonLayout->addStretch();
@@ -71,6 +88,9 @@ FontDialog::FontDialog(const QFont &startFont, QWidget *parent)
 
     QObject::connect(this->sizeW, &FontSizeWidget::selectedChanged, this,
                      &FontDialog::updatePreview);
+
+    QObject::connect(this->letterSpacingW, &QDoubleSpinBox::valueChanged, this,
+                     &FontDialog::updatePreview);
 }
 
 QFont FontDialog::getSelected() const
@@ -82,9 +102,17 @@ QFont FontDialog::getSelected() const
     };
 }
 
+double FontDialog::getSelectedLetterSpacing() const
+{
+    return this->letterSpacingW->value();
+}
+
 void FontDialog::updatePreview()
 {
-    this->preview->setFont(this->getSelected());
+    const auto selected = this->getSelected();
+    this->preview->setFont(makeFont(selected.family(), selected.pointSize(),
+                                    selected.weight(), false,
+                                    this->getSelectedLetterSpacing()));
 }
 
 }  // namespace chatterino

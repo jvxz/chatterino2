@@ -43,6 +43,18 @@ enum class FontStyle : uint8_t {
     ChatEnd = ChatVeryLarge,
 };
 
+/// Stands in for the platform's UI font (San Francisco on macOS) wherever a
+/// font family is stored, since that font's real name is a private one.
+inline const QString SYSTEM_FONT_FAMILY = QStringLiteral("System Font");
+
+/// Makes a font from the font settings.
+///
+/// @param family A font family, or SYSTEM_FONT_FAMILY
+/// @param letterSpacing Extra space after each letter, as a percentage of the
+///                      font size
+QFont makeFont(const QString &family, int pointSize, int weight, bool italic,
+               double letterSpacing);
+
 class Fonts final
 {
 public:

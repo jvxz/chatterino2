@@ -9,14 +9,18 @@
 namespace chatterino {
 
 FontSettingDialog::FontSettingDialog(QStringSetting &family, IntSetting &size,
-                                     IntSetting &weight, QWidget *parent)
-    : FontDialog({family, size, weight}, parent)
+                                     IntSetting &weight,
+                                     DoubleSetting &letterSpacing,
+                                     QWidget *parent)
+    : FontDialog({family, size, weight}, letterSpacing, parent)
     , familySetting(family)
     , sizeSetting(size)
     , weightSetting(weight)
+    , letterSpacingSetting(letterSpacing)
     , oldFamily(family)
     , oldSize(size)
     , oldWeight(weight)
+    , oldLetterSpacing(letterSpacing)
 {
     this->setAttribute(Qt::WA_DeleteOnClose);
 
@@ -37,6 +41,7 @@ void FontSettingDialog::setSettings()
     this->familySetting.setValue(selected.family());
     this->sizeSetting.setValue(selected.pointSize());
     this->weightSetting.setValue(selected.weight());
+    this->letterSpacingSetting.setValue(this->getSelectedLetterSpacing());
 }
 
 void FontSettingDialog::restoreSettings()
@@ -44,6 +49,7 @@ void FontSettingDialog::restoreSettings()
     this->familySetting.setValue(this->oldFamily);
     this->sizeSetting.setValue(this->oldSize);
     this->weightSetting.setValue(this->oldWeight);
+    this->letterSpacingSetting.setValue(this->oldLetterSpacing);
 }
 
 }  // namespace chatterino

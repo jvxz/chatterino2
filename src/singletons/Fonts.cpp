@@ -10,7 +10,10 @@
 #include "singletons/WindowManager.hpp"
 
 #include <QDebug>
+#include <QFontDatabase>
 #include <QtGlobal>
+
+#include <algorithm>
 
 namespace {
 
@@ -146,6 +149,32 @@ bool isItalic(FontStyle style)
     return false;
 }
 
+double fontLetterSpacing(FontStyle style)
+{
+    switch (style)
+    {
+        case FontStyle::ChatSmall:
+        case FontStyle::ChatMediumSmall:
+        case FontStyle::ChatMedium:
+        case FontStyle::ChatMediumBold:
+        case FontStyle::ChatMediumItalic:
+        case FontStyle::ChatLarge:
+        case FontStyle::ChatVeryLarge:
+        case FontStyle::TimestampMedium:
+            return getSettings()->chatLetterSpacing.getValue();
+
+        case FontStyle::Tiny:
+        case FontStyle::UiMedium:
+        case FontStyle::UiMediumBold:
+        case FontStyle::UiTabs:
+        case FontStyle::EndType:
+            return 0.0;
+    }
+
+    assert(false);
+    return 0.0;
+}
+
 QString fontFamily(FontStyle style)
 {
     switch (style)
@@ -178,6 +207,31 @@ QString fontFamily(FontStyle style)
 
 namespace chatterino {
 
+QFont makeFont(const QString &family, int pointSize, int weight, bool italic,
+               double letterSpacing)
+{
+    QFont font;
+    if (family == SYSTEM_FONT_FAMILY)
+    {
+        font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
+        font.setPointSize(pointSize);
+        font.setWeight(static_cast<QFont::Weight>(std::clamp(weight, 1, 1000)));
+        font.setItalic(italic);
+    }
+    else
+    {
+        font = QFont{family, pointSize, weight, italic};
+    }
+
+    if (letterSpacing != 0.0)
+    {
+        font.setLetterSpacing(QFont::AbsoluteSpacing,
+                              pointSize * letterSpacing / 100.0);
+    }
+
+    return font;
+}
+
 Fonts::Fonts(Settings &settings)
 {
     this->fontsByType_.resize(size_t(FontStyle::EndType));
@@ -194,6 +248,7 @@ Fonts::Fonts(Settings &settings)
     this->fontChangedListener.addSetting(settings.chatFontFamily);
     this->fontChangedListener.addSetting(settings.chatFontSize);
     this->fontChangedListener.addSetting(settings.chatFontWeight);
+    this->fontChangedListener.addSetting(settings.chatLetterSpacing);
     this->fontChangedListener.addSetting(settings.boldScale);
 }
 
@@ -233,12 +288,9 @@ Fonts::FontData &Fonts::getOrCreateFontData(FontStyle type, float scale)
 
 Fonts::FontData Fonts::createFontData(FontStyle type, float scale)
 {
-    QFont font{
-        fontFamily(type),
-        static_cast<int>(fontSize(type) * scale),
-        fontWeight(type),
-        isItalic(type),
-    };
+    QFont font =
+        makeFont(fontFamily(type), static_cast<int>(fontSize(type) * scale),
+                 fontWeight(type), isItalic(type), fontLetterSpacing(type));
 
     switch (type)
     {

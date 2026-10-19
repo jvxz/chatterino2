@@ -20,7 +20,8 @@ class FontSettingWidget : public QWidget
 {
 public:
     FontSettingWidget(QStringSetting &family, IntSetting &size,
-                      IntSetting &weight, QWidget *parent = nullptr);
+                      IntSetting &weight, DoubleSetting &letterSpacing,
+                      QWidget *parent = nullptr);
 
 private:
     void updateCurrentLabel();
@@ -31,6 +32,7 @@ private:
     QStringSetting &familySetting;
     IntSetting &sizeSetting;
     IntSetting &weightSetting;
+    DoubleSetting &letterSpacingSetting;
 
     QLabel *currentLabel;
     SignalListener listener;

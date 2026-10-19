@@ -17,11 +17,14 @@
 namespace chatterino {
 
 FontSettingWidget::FontSettingWidget(QStringSetting &family, IntSetting &size,
-                                     IntSetting &weight, QWidget *parent)
+                                     IntSetting &weight,
+                                     DoubleSetting &letterSpacing,
+                                     QWidget *parent)
     : QWidget(parent)
     , familySetting(family)
     , sizeSetting(size)
     , weightSetting(weight)
+    , letterSpacingSetting(letterSpacing)
     , currentLabel(new QLabel)
     , listener([this] {
         this->updateCurrentLabel();
@@ -50,9 +53,17 @@ FontSettingWidget::FontSettingWidget(QStringSetting &family, IntSetting &size,
 void FontSettingWidget::updateCurrentLabel()
 {
     QFont font = getApp()->getFonts()->getFont(FontStyle::ChatMedium, 1);
-    QString family = font.family();
+    // The system font's own name is a private one
+    QString family = this->familySetting.getValue() == SYSTEM_FONT_FAMILY
+                         ? SYSTEM_FONT_FAMILY
+                         : font.family();
     QString ptSize = QString::number(font.pointSize());
-    this->currentLabel->setText(family + ", " + ptSize + "pt");
+    QString text = family + ", " + ptSize + "pt";
+    if (double spacing = this->letterSpacingSetting.getValue(); spacing != 0.0)
+    {
+        text += ", " + QString::number(spacing, 'f', 1) + "% spacing";
+    }
+    this->currentLabel->setText(text);
 }
 
 void FontSettingWidget::showDialog()
@@ -60,7 +71,8 @@ void FontSettingWidget::showDialog()
     if (!this->dialog)
     {
         this->dialog = new FontSettingDialog(
-            this->familySetting, this->sizeSetting, this->weightSetting, this);
+            this->familySetting, this->sizeSetting, this->weightSetting,
+            this->letterSpacingSetting, this);
 
         QObject::connect(this->dialog, &QObject::destroyed, [this] {
             this->dialog = nullptr;

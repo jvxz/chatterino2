@@ -4,6 +4,7 @@
 
 #include "widgets/dialogs/font/FontWeightWidget.hpp"
 
+#include "singletons/Fonts.hpp"
 #include "widgets/dialogs/font/IntItem.hpp"
 
 #include <QBoxLayout>
@@ -21,7 +22,10 @@ namespace {
 QList<int> getWeights(const QString &family)
 {
     QList<int> weights;
-    QStringList styles = QFontDatabase::styles(family);
+    QStringList styles = QFontDatabase::styles(
+        family == SYSTEM_FONT_FAMILY
+            ? QFontDatabase::systemFont(QFontDatabase::GeneralFont).family()
+            : family);
 
     for (const QString &style : styles)
     {
@@ -30,6 +34,13 @@ QList<int> getWeights(const QString &family)
         {
             weights.append(weight);
         }
+    }
+
+    if (weights.isEmpty() && family == SYSTEM_FONT_FAMILY)
+    {
+        // The system font's private family can be missing from the database
+        weights = {QFont::Light, QFont::Normal, QFont::Medium, QFont::DemiBold,
+                   QFont::Bold};
     }
 
     return weights;
