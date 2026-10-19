@@ -67,6 +67,10 @@
 #include "widgets/splits/Split.hpp"
 #include "widgets/Window.hpp"
 
+#ifdef Q_OS_MACOS
+#    include "widgets/MenuBarIcon.hpp"
+#endif
+
 #include <miniaudio.h>
 #include <QApplication>
 #include <QDesktopServices>
@@ -310,7 +314,15 @@ int Application::run()
 
     if (!this->args_.isFramelessEmbed)
     {
-        this->windows->getMainWindow().show();
+        auto &mainWindow = this->windows->getMainWindow();
+#ifdef Q_OS_MACOS
+        new MenuBarIcon(mainWindow);
+        // In menu bar mode, the main window starts hidden
+        if (!getSettings()->menuBarMode)
+#endif
+        {
+            mainWindow.show();
+        }
     }
 
     return QApplication::exec();

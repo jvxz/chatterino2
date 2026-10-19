@@ -1727,6 +1727,20 @@ void SplitNotebook::addCustomButtons()
             this->mapToGlobal(userBtn->rect().bottomRight()));
     });
 
+#ifdef Q_OS_MACOS
+    // Dock icon <-> menu bar icon
+    auto *menuBarBtn = this->addCustomButton<SvgButton>(SvgButton::Src{
+        .dark = ":/buttons/menubar-darkMode.svg",
+        .light = ":/buttons/menubar-lightMode.svg",
+    });
+    menuBarBtn->setPadding({0, 0});
+    menuBarBtn->setToolTip(
+        "Toggle between the Dock icon and the menu bar icon");
+    QObject::connect(menuBarBtn, &Button::leftClicked, [] {
+        getSettings()->menuBarMode.setValue(!getSettings()->menuBarMode);
+    });
+#endif
+
     // updates
     auto *updateBtn = this->addCustomButton<PixmapButton>();
 

@@ -164,7 +164,7 @@ bool Window::event(QEvent *event)
     return BaseWindow::event(event);
 }
 
-void Window::closeEvent(QCloseEvent *)
+void Window::closeEvent([[maybe_unused]] QCloseEvent *event)
 {
     if (isAppAboutToQuit())
     {
@@ -172,6 +172,19 @@ void Window::closeEvent(QCloseEvent *)
             << "Window closeEvent ran when Application is already dead";
         return;
     }
+
+#ifdef Q_OS_MACOS
+    // In menu bar mode, the close button only hides the main window. Quitting
+    // (from the menu bar icon, or when logging out) closes it without a
+    // spontaneous event.
+    if (this->type_ == WindowType::Main && event->spontaneous() &&
+        getSettings()->menuBarMode)
+    {
+        event->ignore();
+        this->hide();
+        return;
+    }
+#endif
 
     auto *app = getApp();
 
