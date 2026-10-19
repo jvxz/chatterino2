@@ -193,6 +193,8 @@ private:
 
 public Q_SLOTS:
     void addSibling();
+    /// Asks whether to close the split; true if it should be closed.
+    bool confirmCloseFromHotkey();
     void deleteFromContainer();
     void changeChannel();
     void explainMoving();

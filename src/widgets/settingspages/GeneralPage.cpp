@@ -275,6 +275,12 @@ void GeneralPage::initLayout(GeneralPageView &layout)
             removeTabShortcut + ".")
         ->addTo(layout);
 
+    SettingWidget::checkbox("Confirm before closing a split with hotkey",
+                            s.confirmCloseSplitHotkey)
+        ->setTooltip("Ask for confirmation when closing a split with its "
+                     "hotkey (Cmd+W by default).")
+        ->addTo(layout);
+
     SettingWidget::checkbox("Always on top", s.windowTopMost)
         ->setTooltip("Always keep Chatterino as the top window.")
         ->addTo(layout);

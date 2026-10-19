@@ -48,6 +48,7 @@
 #include <QJsonArray>
 #include <QLabel>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QMimeData>
 #include <QMovie>
 #include <QPainter>
@@ -252,6 +253,10 @@ void Split::addShortcuts()
     HotkeyController::HotkeyMap actions{
         {"delete",
          [this](const std::vector<QString> &) -> QString {
+             if (!this->confirmCloseFromHotkey())
+             {
+                 return "";
+             }
              this->deleteFromContainer();
              return "";
          }},
@@ -1015,6 +1020,34 @@ void Split::setIsTopRightSplit(bool value)
 void Split::addSibling()
 {
     this->actionRequested.invoke(Action::AppendNewSplit);
+}
+
+bool Split::confirmCloseFromHotkey()
+{
+    if (!getSettings()->confirmCloseSplitHotkey.getValue())
+    {
+        return true;
+    }
+
+    QMessageBox msgBox(this->window());
+    msgBox.setWindowTitle("Chatterino");
+    msgBox.setText("Close this split?");
+    auto *cancel = msgBox.addButton(QMessageBox::Cancel);
+    auto *close = msgBox.addButton("Close", QMessageBox::AcceptRole);
+    auto *closeDontAskAgain =
+        msgBox.addButton("Close, don't ask again", QMessageBox::AcceptRole);
+    msgBox.setDefaultButton(close);
+    msgBox.setEscapeButton(cancel);
+
+    msgBox.exec();
+
+    auto *clicked = msgBox.clickedButton();
+    if (clicked == closeDontAskAgain)
+    {
+        getSettings()->confirmCloseSplitHotkey.setValue(false);
+        return true;
+    }
+    return clicked == close;
 }
 
 void Split::deleteFromContainer()

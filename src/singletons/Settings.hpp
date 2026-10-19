@@ -801,6 +801,8 @@ public:
     BoolSetting askOnImageUpload = {"/misc/askOnImageUpload", true};
     BoolSetting informOnTabVisibilityToggle = {"/misc/askOnTabVisibilityToggle",
                                                true};
+    BoolSetting confirmCloseSplitHotkey = {"/misc/confirmCloseSplitHotkey",
+                                           true};
     BoolSetting lockNotebookLayout = {"/misc/lockNotebookLayout", false};
     BoolSetting showPronouns = {"/misc/showPronouns", false};
     BoolSetting showTitleInLiveMessage = {
