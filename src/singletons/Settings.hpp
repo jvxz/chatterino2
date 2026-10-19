@@ -810,6 +810,7 @@ public:
                                            true};
     BoolSetting lockNotebookLayout = {"/misc/lockNotebookLayout", false};
     BoolSetting showPronouns = {"/misc/showPronouns", false};
+    BoolSetting showPronounsInChat = {"/misc/showPronounsInChat", false};
     BoolSetting showTitleInLiveMessage = {
         "/extraChannels/live/showTitle",
         false,

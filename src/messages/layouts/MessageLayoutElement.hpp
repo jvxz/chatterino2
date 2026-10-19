@@ -8,6 +8,7 @@
 #include "messages/Link.hpp"
 
 #include <pajlada/signals/signalholder.hpp>
+#include <QFont>
 #include <QPen>
 #include <QPoint>
 #include <QRect>
@@ -186,6 +187,26 @@ protected:
     QColor color_;
     FontStyle style_;
     float scale_;
+};
+
+// PILL
+/// Text in a small rounded badge, e.g. a user's pronouns. It's as tall as a
+/// line of chat text and is selected as a whole.
+class PillLayoutElement : public TextLayoutElement
+{
+public:
+    PillLayoutElement(MessageElement &creator_, QString &text, QSizeF size,
+                      float scale_);
+
+    /// The font the pill text is drawn with
+    static QFont font(float scale);
+    /// Horizontal space between the text and the pill's edge
+    static qreal paddingX(float scale);
+
+protected:
+    void paint(QPainter &painter, const MessageColors &messageColors) override;
+    int getMouseOverIndex(QPointF abs) const override;
+    qreal getXFromIndex(size_t index) override;
 };
 
 // TEXT ICON

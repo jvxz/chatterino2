@@ -53,7 +53,8 @@ enum class MessageElementFlag : int64_t {
     ChannelPointReward = (1LL << 8),
     ChannelPointRewardImage = ChannelPointReward | EmoteImage,
 
-    // unused: (1LL << 9),
+    /// A user's pronouns from alejo.io, between the badges and the username
+    Pronouns = (1LL << 9),
     // unused: (1LL << 10),
 
     BitsStatic = (1LL << 11),
@@ -521,6 +522,40 @@ private:
     MessageColor userColor_;
 
     QString userLoginName_;
+};
+
+/**
+ * @brief Shows a user's pronouns (e.g. "she/her") from alejo.io.
+ *
+ * The pronouns are looked up when the message is laid out, not when it's
+ * built, so messages show pronouns that arrive after them. On a cache miss
+ * the lookup starts a background fetch and the element stays empty until
+ * it finishes.
+ */
+class PronounsElement : public TextElement
+{
+public:
+    static constexpr std::string_view TYPE = "pronouns";
+
+    explicit PronounsElement(QString loginName);
+    ~PronounsElement() override = default;
+    PronounsElement(const PronounsElement &) = delete;
+    PronounsElement(PronounsElement &&) = delete;
+    PronounsElement &operator=(const PronounsElement &) = delete;
+    PronounsElement &operator=(PronounsElement &&) = delete;
+
+    void addToContainer(MessageLayoutContainer &container,
+                        const MessageLayoutContext &ctx) override;
+
+    QJsonObject toJson() const override;
+    std::string_view type() const override;
+    std::unique_ptr<MessageElement> clone() const override;
+
+private:
+    QString loginName_;
+    /// True once the lookup got an answer (pronouns or none), so later
+    /// layouts skip it.
+    bool resolved_ = false;
 };
 
 // contains emote data and will pick the emote based on :

@@ -1896,6 +1896,11 @@ std::pair<MessagePtrMut, HighlightAlert> MessageBuilder::makeIrcMessage(
         builder.appendBttvBadges(userID);
         builder.appendSeventvBadges(userID);
 
+        if (getSettings()->showPronounsInChat)
+        {
+            builder.emplace<PronounsElement>(builder->loginName);
+        }
+
         builder.appendUsername(tags, args);
 
         TextState textState{.twitchChannel = twitchChannel};

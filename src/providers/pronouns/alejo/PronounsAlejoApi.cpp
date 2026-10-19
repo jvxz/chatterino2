@@ -28,24 +28,35 @@ constexpr QStringView API_PRONOUNS_ENDPOINT = u"/pronouns";
 namespace chatterino::pronouns {
 
 AlejoApi::AlejoApi()
+    : loadingPronouns(true)
 {
     this->loadAvailablePronouns();
 }
 
-void AlejoApi::fetch(
-    const QString &username,
-    const std::function<void(std::optional<UserPronouns>)> &onDone)
+void AlejoApi::fetch(const QString &username, const Callback &onDone)
 {
     {
-        std::shared_lock lock(this->mutex);
+        std::unique_lock lock(this->mutex);
         if (this->pronouns.empty())
         {
-            // Pronoun list not available yet, fail and try again next time.
-            onDone({});
+            // Pronoun list not available yet, wait for it instead of failing
+            // so messages built at startup still get their pronouns.
+            this->pendingFetches.emplace_back(username, onDone);
+            if (!this->loadingPronouns)
+            {
+                this->loadingPronouns = true;
+                lock.unlock();
+                this->loadAvailablePronouns();
+            }
             return;
         }
     }
 
+    this->fetchUser(username, onDone);
+}
+
+void AlejoApi::fetchUser(const QString &username, const Callback &onDone)
+{
     qCDebug(LOG) << "Fetching pronouns from alejo.io for" << username;
 
     QString endpoint = API_URL % API_USERS_ENDPOINT % "/" % username;
@@ -83,10 +94,6 @@ void AlejoApi::loadAvailablePronouns()
         .concurrent()
         .onSuccess([this](const auto &result) {
             auto root = result.parseJson();
-            if (root.isEmpty())
-            {
-                return;
-            }
 
             std::unordered_map<QString, PronounEntry> newPronouns;
 
@@ -109,14 +116,44 @@ void AlejoApi::loadAvailablePronouns()
                     PronounEntry{subject, object, singular};
             }
 
+            decltype(this->pendingFetches) pending;
+            bool loaded = !newPronouns.empty();
             {
                 std::unique_lock lock(this->mutex);
-                this->pronouns = newPronouns;
+                this->pronouns = std::move(newPronouns);
+                this->loadingPronouns = false;
+                pending.swap(this->pendingFetches);
+            }
+
+            for (const auto &[username, onDone] : pending)
+            {
+                if (!loaded)
+                {
+                    // The list came back empty, the next fetch retries it.
+                    onDone({});
+                }
+                else
+                {
+                    this->fetchUser(username, onDone);
+                }
             }
         })
-        .onError([](const NetworkResult &result) {
+        .onError([this](const NetworkResult &result) {
             qCWarning(LOG) << "Failed to load pronouns from alejo.io"
                            << result.formatError();
+
+            decltype(this->pendingFetches) pending;
+            {
+                std::unique_lock lock(this->mutex);
+                this->loadingPronouns = false;
+                pending.swap(this->pendingFetches);
+            }
+
+            // The next fetch retries loading the list.
+            for (const auto &[username, onDone] : pending)
+            {
+                onDone({});
+            }
         })
         .execute();
 }
