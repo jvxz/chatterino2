@@ -91,21 +91,15 @@ void MenuBarIcon::createIcon()
         return action;
     };
 
-    auto *toggle = addAction("Show Chatterino");
-    QObject::connect(menu, &QMenu::aboutToShow, toggle, [this, toggle] {
-        toggle->setText(this->mainWindow_.isVisible() ? "Hide Chatterino"
-                                                      : "Show Chatterino");
-    });
-    QObject::connect(toggle, &QAction::triggered, this, [this] {
-        if (this->mainWindow_.isVisible())
-        {
-            this->mainWindow_.hide();
-        }
-        else
-        {
-            this->showMainWindow();
-        }
-    });
+    // Always shows and raises: the window may be open behind other apps
+    QObject::connect(addAction("Show Chatterino"), &QAction::triggered, this,
+                     [this] {
+                         this->showMainWindow();
+                     });
+    QObject::connect(addAction("Hide Chatterino"), &QAction::triggered, this,
+                     [this] {
+                         this->mainWindow_.hide();
+                     });
 
     QObject::connect(addAction("Settings"), &QAction::triggered, this, [this] {
         activateMacOSApp();
