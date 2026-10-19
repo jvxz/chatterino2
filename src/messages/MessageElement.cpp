@@ -22,6 +22,7 @@
 #include "util/DebugCount.hpp"
 #include "util/Variant.hpp"
 
+#include <QFontMetricsF>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -1353,7 +1354,25 @@ void PronounsElement::addToContainer(MessageLayoutContainer &container,
         this->words_ = {pronouns->format()};
     }
 
-    TextElement::addToContainer(container, ctx);
+    if (this->words_.isEmpty())
+    {
+        return;
+    }
+
+    auto scale = container.getScale();
+    auto text = this->words_.front();
+    QFontMetricsF metrics(PillLayoutElement::font(scale));
+    QSizeF size(metrics.horizontalAdvance(text) +
+                    (2 * PillLayoutElement::paddingX(scale)),
+                getApp()
+                    ->getFonts()
+                    ->getFontMetrics(FontStyle::ChatMedium, scale)
+                    .height());
+
+    auto *e = new PillLayoutElement(*this, text, size, scale);
+    e->setTrailingSpace(this->hasTrailingSpace());
+    e->setWordId(container.nextWordId());
+    container.addElement(e);
 }
 
 QJsonObject PronounsElement::toJson() const

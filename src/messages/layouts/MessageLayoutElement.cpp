@@ -13,8 +13,11 @@
 #include "util/DebugCount.hpp"
 
 #include <QDebug>
+#include <QFontMetricsF>
 #include <QPainter>
 #include <QPainterPath>
+
+#include <algorithm>
 
 namespace {
 
@@ -549,6 +552,76 @@ qreal TextLayoutElement::getXFromIndex(size_t index)
     {
         return this->getRect().right();
     }
+}
+
+// PILL
+PillLayoutElement::PillLayoutElement(MessageElement &creator, QString &text,
+                                     QSizeF size, float scale)
+    : TextLayoutElement(creator, text, size, QColor{},
+                        FontStyle::ChatMediumSmall, scale)
+{
+}
+
+QFont PillLayoutElement::font(float scale)
+{
+    auto font =
+        getApp()->getFonts()->getFont(FontStyle::ChatMediumSmall, scale);
+    font.setWeight(QFont::DemiBold);
+    return font;
+}
+
+qreal PillLayoutElement::paddingX(float scale)
+{
+    return 5 * scale;
+}
+
+void PillLayoutElement::paint(QPainter &painter,
+                              const MessageColors &messageColors)
+{
+    auto font = PillLayoutElement::font(this->scale_);
+    QFontMetricsF metrics(font);
+
+    // Center the pill on the line, with a little room above and below the text
+    const auto &rect = this->getRect();
+    qreal pillHeight =
+        std::min(rect.height(), metrics.height() + (2 * this->scale_));
+    QRectF pill(rect.x(), rect.y() + ((rect.height() - pillHeight) / 2),
+                rect.width(), pillHeight);
+
+    // Tinted with the text color so it reads on light and dark themes
+    QColor background = messageColors.regularText;
+    background.setAlphaF(0.16F);
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(background);
+    painter.drawRoundedRect(pill, pillHeight / 2, pillHeight / 2);
+
+    painter.setPen(messageColors.regularText);
+    painter.setFont(font);
+    painter.drawText(pill, Qt::AlignCenter, this->getText());
+    painter.restore();
+}
+
+int PillLayoutElement::getMouseOverIndex(QPointF abs) const
+{
+    if (abs.x() >= this->getRect().center().x())
+    {
+        return static_cast<int>(this->getText().length());
+    }
+
+    return 0;
+}
+
+qreal PillLayoutElement::getXFromIndex(size_t index)
+{
+    if (index == 0)
+    {
+        return this->getRect().left();
+    }
+
+    return this->getRect().right();
 }
 
 // TEXT ICON
