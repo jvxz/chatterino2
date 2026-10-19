@@ -17,7 +17,8 @@ class FontSettingDialog : public FontDialog
 
 public:
     FontSettingDialog(QStringSetting &family, IntSetting &size,
-                      IntSetting &weight, QWidget *parent = nullptr);
+                      IntSetting &weight, DoubleSetting &letterSpacing,
+                      QWidget *parent = nullptr);
 
 private:
     /// Apply the current dialog's values to the font settings
@@ -29,10 +30,12 @@ private:
     QStringSetting &familySetting;
     IntSetting &sizeSetting;
     IntSetting &weightSetting;
+    DoubleSetting &letterSpacingSetting;
 
     QString oldFamily;
     int oldSize;
     int oldWeight;
+    double oldLetterSpacing;
 };
 
 }  // namespace chatterino

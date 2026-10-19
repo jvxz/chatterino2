@@ -5,6 +5,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QDoubleSpinBox>
 #include <QFont>
 #include <QWidget>
 
@@ -20,10 +21,14 @@ class FontDialog : public QDialog
     Q_OBJECT
 
 public:
-    FontDialog(const QFont &startFont, QWidget *parent = nullptr);
+    FontDialog(const QFont &startFont, double startLetterSpacing,
+               QWidget *parent = nullptr);
 
     /// Gets the currently selected font.
     QFont getSelected() const;
+
+    /// Gets the selected letter spacing, as a percentage of the font size.
+    double getSelectedLetterSpacing() const;
 
 Q_SIGNALS:
     void applied();
@@ -35,6 +40,7 @@ private:
     FontFamilyWidget *familyW;
     FontSizeWidget *sizeW;
     FontWeightWidget *weightW;
+    QDoubleSpinBox *letterSpacingW;
 };
 
 }  // namespace chatterino

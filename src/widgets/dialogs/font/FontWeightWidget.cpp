@@ -4,12 +4,14 @@
 
 #include "widgets/dialogs/font/FontWeightWidget.hpp"
 
+#include "singletons/Fonts.hpp"
 #include "widgets/dialogs/font/IntItem.hpp"
 
 #include <QBoxLayout>
 #include <QFontDatabase>
 #include <QLabel>
 #include <QList>
+#include <QSignalBlocker>
 #include <QString>
 #include <QStringList>
 
@@ -21,7 +23,10 @@ namespace {
 QList<int> getWeights(const QString &family)
 {
     QList<int> weights;
-    QStringList styles = QFontDatabase::styles(family);
+    QStringList styles = QFontDatabase::styles(
+        family == SYSTEM_FONT_FAMILY
+            ? QFontDatabase::systemFont(QFontDatabase::GeneralFont).family()
+            : family);
 
     for (const QString &style : styles)
     {
@@ -32,6 +37,13 @@ QList<int> getWeights(const QString &family)
         }
     }
 
+    if (weights.isEmpty() && family == SYSTEM_FONT_FAMILY)
+    {
+        // The system font's private family can be missing from the database
+        weights = {QFont::Light, QFont::Normal, QFont::Medium, QFont::DemiBold,
+                   QFont::Bold};
+    }
+
     return weights;
 }
 
@@ -40,28 +52,47 @@ QList<int> getWeights(const QString &family)
 FontWeightWidget::FontWeightWidget(const QFont &startFont, QWidget *parent)
     : QWidget(parent)
     , list(new QListWidget)
+    , edit(new QSpinBox)
 {
     auto *layout = new QVBoxLayout;
+    auto *header = new QHBoxLayout;
 
     this->setLayout(layout);
 
-    this->setFamily(startFont.family());
-    if (IntItem *item = findIntItemInList(this->list, startFont.weight()))
-    {
-        this->list->setCurrentItem(item);
-    }
+    // Below 100, Qt reads weights as legacy ones (0-99)
+    this->edit->setRange(100, 1000);
+    this->edit->setSingleStep(10);
 
-    layout->addWidget(new QLabel("Weight"));
+    this->setFamily(startFont.family());
+    this->edit->setValue(startFont.weight());
+    this->setListSelected(startFont.weight());
+
+    layout->addLayout(header);
     layout->addWidget(this->list);
     layout->setContentsMargins(0, 0, 0, 0);
 
-    QObject::connect(this->list, &QListWidget::currentRowChanged, this,
-                     [this](int row) {
-                         if (row >= 0)
-                         {
-                             Q_EMIT this->selectedChanged();
-                         }
+    header->addWidget(new QLabel("Weight"));
+    header->addWidget(this->edit);
+
+    QObject::connect(this->edit, &QSpinBox::valueChanged, this,
+                     [this](int value) {
+                         QSignalBlocker listSignalBlocker(this->list);
+                         this->setListSelected(value);
+                         Q_EMIT this->selectedChanged();
                      });
+
+    QObject::connect(
+        this->list, &QListWidget::currentRowChanged, this, [this](int row) {
+            if (row < 0)
+            {
+                return;
+            }
+            auto *cast = dynamic_cast<IntItem *>(this->list->item(row));
+            assert(cast);
+            QSignalBlocker editSignalBlocker(this->edit);
+            this->edit->setValue(cast->getValue());
+            Q_EMIT this->selectedChanged();
+        });
 }
 
 void FontWeightWidget::setFamily(const QString &family)
@@ -103,12 +134,33 @@ void FontWeightWidget::setFamily(const QString &family)
     }
 
     this->list->setCurrentRow(startRow);
+
+    QSignalBlocker editSignalBlocker{this->edit};
+    if (auto *cast = dynamic_cast<IntItem *>(this->list->currentItem()))
+    {
+        this->edit->setValue(cast->getValue());
+    }
 }
 
 int FontWeightWidget::getSelected() const
 {
-    auto *cast = dynamic_cast<IntItem *>(this->list->currentItem());
-    return cast ? cast->getValue() : -1;
+    return this->edit->value();
+}
+
+void FontWeightWidget::setListSelected(int weight)
+{
+    for (int i = 0; i < this->list->count(); ++i)
+    {
+        auto *item = dynamic_cast<IntItem *>(this->list->item(i));
+        if (item && !item->isHidden() && item->getValue() == weight)
+        {
+            this->list->setCurrentItem(item);
+            return;
+        }
+    }
+
+    // A weight in between the listed ones
+    this->list->setCurrentRow(-1);
 }
 
 }  // namespace chatterino

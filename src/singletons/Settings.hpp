@@ -244,6 +244,11 @@ public:
         "/appearance/currentFontWeight",
         QFont::Normal,
     };
+    // Extra space after each letter in chat, as a percentage of the font size
+    DoubleSetting chatLetterSpacing = {
+        "/appearance/currentFontLetterSpacing",
+        0.0,
+    };
     BoolSetting hideReplyContext = {"/appearance/hideReplyContext", false};
     BoolSetting showReplyButton = {"/appearance/showReplyButton", false};
     BoolSetting stripReplyMention = {"/appearance/stripReplyMention", true};

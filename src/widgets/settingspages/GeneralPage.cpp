@@ -254,9 +254,10 @@ void GeneralPage::initLayout(GeneralPageView &layout)
                      "the whole width of the window.")
         ->addTo(layout);
 
-    layout.addWidget(new FontSettingWidget(s.chatFontFamily, s.chatFontSize,
-                                           s.chatFontWeight),
-                     {"font", "weight", "size"});
+    layout.addWidget(
+        new FontSettingWidget(s.chatFontFamily, s.chatFontSize,
+                              s.chatFontWeight, s.chatLetterSpacing),
+        {"font", "weight", "size", "letter", "spacing", "system"});
 
     SettingWidget::inverseCheckbox("Show message reply context",
                                    s.hideReplyContext)

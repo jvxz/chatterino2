@@ -4,6 +4,8 @@
 
 #include "widgets/dialogs/font/FontFamilyWidget.hpp"
 
+#include "singletons/Fonts.hpp"
+
 #include <QBoxLayout>
 #include <QFontDatabase>
 #include <QLabel>
@@ -18,6 +20,7 @@ QStringList getFontFamilies()
 {
     QStringList families = QFontDatabase::families();
     families.removeIf(QFontDatabase::isPrivateFamily);
+    families.prepend(SYSTEM_FONT_FAMILY);
     return families;
 }
 

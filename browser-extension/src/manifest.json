@@ -27,12 +27,12 @@
     {
       "run_at": "document_end",
       "matches": ["https://www.twitch.tv/*"],
-      "js": ["inject.js"]
+      "js": ["chat-resize.js", "inject.js"]
     },
     {
       "run_at": "document_idle",
       "matches": ["https://lofi-nopixel.com/*"],
-      "js": ["lofi.js"]
+      "js": ["chat-resize.js", "lofi.js"]
     }
   ]
 }
