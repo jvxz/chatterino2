@@ -15,6 +15,7 @@
 #include "messages/layouts/MessageLayoutContext.hpp"
 #include "messages/layouts/MessageLayoutElement.hpp"
 #include "providers/emoji/Emojis.hpp"
+#include "providers/pronouns/Pronouns.hpp"
 #include "providers/twitch/TwitchEmotes.hpp"
 #include "singletons/Settings.hpp"
 #include "singletons/Theme.hpp"
@@ -1314,6 +1315,67 @@ std::unique_ptr<MessageElement> MentionElement::clone() const
     elem->setTooltip(this->getTooltip());
     elem->setTrailingSpace(this->hasTrailingSpace());
     elem->exhaustiveFlags = this->exhaustiveFlags;
+    return elem;
+}
+
+// PRONOUNS
+PronounsElement::PronounsElement(QString loginName)
+    : TextElement(TextElement::CloneConstructorTag{}, {},
+                  MessageElementFlag::Pronouns, MessageColor::System)
+    , loginName_(std::move(loginName))
+{
+    this->setLink({Link::UserInfo, this->loginName_});
+}
+
+void PronounsElement::addToContainer(MessageLayoutContainer &container,
+                                     const MessageLayoutContext &ctx)
+{
+    if (!this->matchesFlags(ctx.flags))
+    {
+        return;
+    }
+
+    if (!this->resolved_)
+    {
+        auto pronouns =
+            getApp()->getPronouns()->getOrFetchUserPronoun(this->loginName_);
+        if (!pronouns.has_value())
+        {
+            // Not fetched yet, chat is relayouted once it is
+            return;
+        }
+
+        this->resolved_ = true;
+        if (pronouns->isUnspecified())
+        {
+            return;
+        }
+        this->words_ = {pronouns->format()};
+    }
+
+    TextElement::addToContainer(container, ctx);
+}
+
+QJsonObject PronounsElement::toJson() const
+{
+    auto base = TextElement::toJson();
+    base["type"_L1] = u"PronounsElement"_s;
+    base["loginName"_L1] = this->loginName_;
+
+    return base;
+}
+
+std::string_view PronounsElement::type() const
+{
+    return std::remove_pointer_t<decltype(this)>::TYPE;
+}
+
+std::unique_ptr<MessageElement> PronounsElement::clone() const
+{
+    auto elem = std::make_unique<PronounsElement>(this->loginName_);
+    elem->words_ = this->words_;
+    elem->resolved_ = this->resolved_;
+    elem->cloneFrom(*this);
     return elem;
 }
 

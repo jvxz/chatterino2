@@ -155,6 +155,7 @@ WindowManager::WindowManager(const Args &appArgs_, const Paths &paths,
     this->updateWordTypeMaskListener.add(settings.enableEmoteImages);
     this->updateWordTypeMaskListener.add(settings.lowercaseDomains);
     this->updateWordTypeMaskListener.add(settings.showReplyButton);
+    this->updateWordTypeMaskListener.add(settings.showPronounsInChat);
 
     this->forceLayoutChannelViewsListener.add(
         settings.moderationActions.delayedItemsChanged);
@@ -271,6 +272,9 @@ void WindowManager::updateWordTypeMask()
     flags.set(settings->showBadgesFfz ? MEF::BadgeFfz : MEF::None);
     flags.set(settings->showBadgesBttv ? MEF::BadgeBttv : MEF::None);
     flags.set(settings->showBadgesSevenTV ? MEF::BadgeSevenTV : MEF::None);
+
+    // pronouns
+    flags.set(MEF::Pronouns, settings->showPronounsInChat);
 
     // username
     flags.set(MEF::Username);
