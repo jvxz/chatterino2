@@ -225,6 +225,16 @@ QFont makeFont(const QString &family, int pointSize, int weight, bool italic,
         font = QFont{family, pointSize, weight, italic};
     }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+    // Qt only picks the named style closest to `weight` (400 or 500 for 450).
+    // Variable fonts like the macOS system font take any weight on their
+    // weight axis, and static fonts ignore it.
+    if (weight >= 100 && weight % 100 != 0)
+    {
+        font.setVariableAxis(QFont::Tag("wght"), static_cast<float>(weight));
+    }
+#endif
+
     if (letterSpacing != 0.0)
     {
         font.setLetterSpacing(QFont::AbsoluteSpacing,
