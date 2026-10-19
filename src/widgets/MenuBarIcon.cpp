@@ -12,8 +12,7 @@
 
 #include <QApplication>
 #include <QIcon>
-#include <QMenu>
-#include <QSystemTrayIcon>
+#include <QTimer>
 
 namespace chatterino {
 
@@ -28,11 +27,13 @@ MenuBarIcon::MenuBarIcon(Window &mainWindow)
         this->signalHolder_);
 }
 
+MenuBarIcon::~MenuBarIcon() = default;
+
 void MenuBarIcon::apply(bool enabled)
 {
-    // The icon exists exactly while the mode is on. This also skips the first
-    // call when it's off, before the main window is shown.
-    if (enabled == (this->icon_ != nullptr))
+    // This also skips the first call when the mode is off, before the main
+    // window is shown
+    if (enabled == (this->item_ != nullptr))
     {
         return;
     }
@@ -54,13 +55,13 @@ void MenuBarIcon::apply(bool enabled)
     if (enabled)
     {
         this->createIcon();
-        this->icon_->show();
         return;
     }
 
     // Deferred: this can run from the icon's own menu
-    this->icon_->deleteLater();
-    this->icon_ = nullptr;
+    QTimer::singleShot(0, [item = this->item_.release()] {
+        delete item;
+    });
 
     // The main window can't be reached anymore once the icon is gone
     if (!this->mainWindow_.isVisible())
@@ -71,56 +72,31 @@ void MenuBarIcon::apply(bool enabled)
 
 void MenuBarIcon::createIcon()
 {
-    // Drawn by macOS in the menu bar's text color
-    QIcon image(":/menubar-icon.svg");
-    image.setIsMask(true);
-
-    this->icon_ = new QSystemTrayIcon(image, this);
-    this->icon_->setToolTip("Chatterino");
-
-    // QSystemTrayIcon doesn't own its menu
-    auto *menu = new QMenu();
-    QObject::connect(this->icon_, &QObject::destroyed, menu,
-                     &QObject::deleteLater);
-
-    // Without an explicit role, Qt moves actions whose text looks like
-    // "Quit" or "Preferences" into the application menu
-    auto addAction = [menu](const QString &text) {
-        auto *action = menu->addAction(text);
-        action->setMenuRole(QAction::NoRole);
-        return action;
-    };
+    // Rendered at 2x for Retina displays
+    const auto image =
+        QIcon(":/menubar-icon.svg").pixmap(QSize(36, 36)).toImage();
+    this->item_ = std::make_unique<MacOSStatusItem>(image, "Chatterino");
 
     // Always shows and raises: the window may be open behind other apps
-    QObject::connect(addAction("Show Chatterino"), &QAction::triggered, this,
-                     [this] {
-                         this->showMainWindow();
-                     });
-    QObject::connect(addAction("Hide Chatterino"), &QAction::triggered, this,
-                     [this] {
-                         this->mainWindow_.hide();
-                     });
-
-    QObject::connect(addAction("Settings"), &QAction::triggered, this, [this] {
+    this->item_->addAction("Show Chatterino", [this] {
+        this->showMainWindow();
+    });
+    this->item_->addAction("Hide Chatterino", [this] {
+        this->mainWindow_.hide();
+    });
+    this->item_->addAction("Settings", [this] {
         activateMacOSApp();
         getApp()->getWindows()->showSettingsDialog(&this->mainWindow_);
     });
-
-    QObject::connect(addAction("Show in the Dock instead"), &QAction::triggered,
-                     this, [] {
-                         getSettings()->menuBarMode.setValue(false);
-                     });
-
-    menu->addSeparator();
-
+    this->item_->addAction("Show in the Dock instead", [] {
+        getSettings()->menuBarMode.setValue(false);
+    });
+    this->item_->addSeparator();
     // Closing the main window without a click on its close button quits, see
     // Window::closeEvent
-    QObject::connect(addAction("Quit Chatterino"), &QAction::triggered, this,
-                     [this] {
-                         this->mainWindow_.close();
-                     });
-
-    this->icon_->setContextMenu(menu);
+    this->item_->addAction("Quit Chatterino", [this] {
+        this->mainWindow_.close();
+    });
 }
 
 void MenuBarIcon::showMainWindow()

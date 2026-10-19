@@ -7,10 +7,11 @@
 #include <pajlada/signals/signalholder.hpp>
 #include <QObject>
 
-class QSystemTrayIcon;
+#include <memory>
 
 namespace chatterino {
 
+class MacOSStatusItem;
 class Window;
 
 /// macOS menu bar mode: while the `menuBarMode` setting is on, Chatterino has
@@ -21,6 +22,11 @@ class MenuBarIcon : public QObject
 public:
     /// Follows the setting for as long as `mainWindow` exists
     explicit MenuBarIcon(Window &mainWindow);
+    ~MenuBarIcon() override;
+    MenuBarIcon(const MenuBarIcon &) = delete;
+    MenuBarIcon &operator=(const MenuBarIcon &) = delete;
+    MenuBarIcon(MenuBarIcon &&) = delete;
+    MenuBarIcon &operator=(MenuBarIcon &&) = delete;
 
 private:
     void apply(bool enabled);
@@ -28,7 +34,8 @@ private:
     void showMainWindow();
 
     Window &mainWindow_;
-    QSystemTrayIcon *icon_ = nullptr;
+    /// Exists exactly while the mode is on
+    std::unique_ptr<MacOSStatusItem> item_;
     pajlada::Signals::SignalHolder signalHolder_;
 };
 

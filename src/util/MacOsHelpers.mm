@@ -1,7 +1,30 @@
 #include "util/MacOsHelpers.h"
 
 #include <AppKit/AppKit.h>
+#include <QImage>
 #include <QUrl>
+
+#include <vector>
+
+/// Calls the callback at the clicked menu item's tag
+@interface ChatterinoStatusItemTarget : NSObject
+{
+@public
+    std::vector<std::function<void()>> callbacks;
+}
+- (void)itemClicked:(NSMenuItem *)sender;
+@end
+
+@implementation ChatterinoStatusItemTarget
+- (void)itemClicked:(NSMenuItem *)sender
+{
+    const auto index = static_cast<size_t>(sender.tag);
+    if (index < self->callbacks.size())
+    {
+        self->callbacks[index]();
+    }
+}
+@end
 
 void chatterinoSetMacOsActivationPolicyProhibited()
 {
@@ -199,6 +222,60 @@ void onMacOSAppActivated(std::function<void(qint64 pid)> callback)
                       notification.userInfo[NSWorkspaceApplicationKey];
                   callback(app.processIdentifier);
                 }];
+}
+
+MacOSStatusItem::MacOSStatusItem(const QImage &icon, const QString &toolTip)
+{
+    // A square item fits the menu bar's height (22pt, 24pt with a notch)
+    NSStatusItem *item = [[NSStatusBar.systemStatusBar
+        statusItemWithLength:NSSquareStatusItemLength] retain];
+    // Brings it back if it was removed by dragging it out of the menu bar
+    item.visible = YES;
+
+    CGImageRef cgImage = icon.toCGImage();
+    NSImage *image = [[NSImage alloc] initWithCGImage:cgImage
+                                                 size:NSMakeSize(18, 18)];
+    CGImageRelease(cgImage);
+    image.template = YES;
+    item.button.image = image;
+    [image release];
+    item.button.toolTip = toolTip.toNSString();
+
+    NSMenu *menu = [[NSMenu alloc] init];
+    menu.autoenablesItems = NO;
+    item.menu = menu;
+    [menu release];
+
+    this->item_ = item;
+    this->target_ = [[ChatterinoStatusItemTarget alloc] init];
+}
+
+MacOSStatusItem::~MacOSStatusItem()
+{
+    auto *item = (NSStatusItem *)this->item_;
+    [NSStatusBar.systemStatusBar removeStatusItem:item];
+    [item release];
+    [(ChatterinoStatusItemTarget *)this->target_ release];
+}
+
+void MacOSStatusItem::addAction(const QString &title,
+                                std::function<void()> callback)
+{
+    auto *target = (ChatterinoStatusItemTarget *)this->target_;
+    NSMenuItem *menuItem =
+        [[NSMenuItem alloc] initWithTitle:title.toNSString()
+                                   action:@selector(itemClicked:)
+                            keyEquivalent:@""];
+    menuItem.target = target;
+    menuItem.tag = static_cast<NSInteger>(target->callbacks.size());
+    target->callbacks.push_back(std::move(callback));
+    [((NSStatusItem *)this->item_).menu addItem:menuItem];
+    [menuItem release];
+}
+
+void MacOSStatusItem::addSeparator()
+{
+    [((NSStatusItem *)this->item_).menu addItem:[NSMenuItem separatorItem]];
 }
 #endif
 
