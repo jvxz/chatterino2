@@ -236,7 +236,8 @@ MacOSStatusItem::MacOSStatusItem(const QImage &icon, const QString &toolTip)
     NSImage *image = [[NSImage alloc] initWithCGImage:cgImage
                                                  size:NSMakeSize(18, 18)];
     CGImageRelease(cgImage);
-    image.template = YES;
+    // Not the property syntax: `template` is a C++ keyword
+    [image setTemplate:YES];
     item.button.image = image;
     [image release];
     item.button.toolTip = toolTip.toNSString();
