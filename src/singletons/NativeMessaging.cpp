@@ -481,6 +481,11 @@ void NativeMessagingServer::ReceiverThread::handleMessage(
         this->handleOverlay(root);
         return;
     }
+    if (action == "kick-channel")
+    {
+        this->handleKickChannel(root);
+        return;
+    }
 
     qCDebug(chatterinoNativeMessage) << "NM unknown action" << action;
 }
@@ -583,11 +588,10 @@ void NativeMessagingServer::ReceiverThread::handleMultiPov(
     // { action: 'multipov', povs: string[] }
     // povs are lofi-nopixel.com slugs ("t-name" or "k-name") of the POVs that
     // have their chat open.
-    postToThread([channels = multipov::twitchChannelsFromPovs(
-                      root["povs"_L1].toArray())] {
+    postToThread([povs = multipov::parsePovs(root["povs"_L1].toArray())] {
         if (getSettings()->multiPovSyncEnabled)
         {
-            multipov::syncSplits(channels);
+            multipov::syncSplits(povs);
         }
     });
 }
@@ -611,27 +615,50 @@ void NativeMessagingServer::ReceiverThread::handleOverlay(
         return;
     }
 
-    const auto channel =
-        multipov::twitchChannelFromPov(root["pov"_L1].toString());
+    const auto pov = multipov::parsePov(root["pov"_L1].toString());
     const auto rectObject = root["rect"_L1].toObject();
     const QRect rect(qRound(rectObject["x"_L1].toDouble()),
                      qRound(rectObject["y"_L1].toDouble()),
                      qRound(rectObject["width"_L1].toDouble()),
                      qRound(rectObject["height"_L1].toDouble()));
 
-    if (!channel || rect.isEmpty())
+    if (!pov || rect.isEmpty())
     {
         qCDebug(chatterinoNativeMessage) << "Browser asks to hide the overlay:"
                                          << root["reason"_L1].toString();
     }
 
-    postToThread([channel, rect] {
-        if (!getSettings()->povOverlayEnabled || !channel || rect.isEmpty())
+    postToThread([pov, rect] {
+        if (!getSettings()->povOverlayEnabled || !pov || rect.isEmpty())
         {
             multipov::hideOverlay();
             return;
         }
-        multipov::showOverlay(*channel, rect);
+        multipov::showOverlay(*pov, rect);
+    });
+}
+
+void NativeMessagingServer::ReceiverThread::handleKickChannel(
+    const QJsonObject &root)
+{
+    // Structure:
+    // { action: 'kick-channel', slug: string, chatroomId?: number }
+    // The browser looked up the Kick chatroom of the channel at kick.com/slug.
+    // Without a chatroomId, there's no such channel.
+    const auto slug = root["slug"_L1].toString().toLower();
+    if (slug.isEmpty())
+    {
+        return;
+    }
+
+    std::optional<int64_t> chatroomId;
+    if (const auto value = root["chatroomId"_L1]; value.isDouble())
+    {
+        chatroomId = static_cast<int64_t>(value.toDouble());
+    }
+
+    postToThread([slug, chatroomId] {
+        multipov::setKickChatroom(slug, chatroomId);
     });
 }
 

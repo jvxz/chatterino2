@@ -6,6 +6,8 @@
 
 #include "common/Channel.hpp"
 #include "common/QLogging.hpp"
+#include "widgets/helper/ChannelView.hpp"
+#include "widgets/helper/PlatformToggle.hpp"
 #include "widgets/splits/Split.hpp"
 
 #ifdef Q_OS_MACOS
@@ -24,7 +26,16 @@ PovOverlayWindow::PovOverlayWindow()
     : QWidget(nullptr,
               Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
     , split_(new Split(this))
+    , toggle_(new PlatformToggle(&this->split_->getChannelView()))
 {
+    this->toggle_->platformPicked.connect([this](multipov::Platform platform) {
+        if (this->pov_)
+        {
+            multipov::chooseChat(*this->pov_, platform);
+            this->updateChat();
+        }
+    });
+
     // Tool windows are hidden while Chatterino isn't the active app, which is
     // always the case while the browser is focused.
     this->setAttribute(Qt::WA_MacAlwaysShowToolWindow);
@@ -49,12 +60,21 @@ PovOverlayWindow::PovOverlayWindow()
 #endif
 }
 
-void PovOverlayWindow::showAt(const QRect &panel, const ChannelPtr &channel)
+void PovOverlayWindow::updateChat()
 {
+    const auto platform = multipov::chosenPlatform(*this->pov_);
+    auto channel = multipov::chatOf(*this->pov_, platform);
     if (this->split_->getChannel() != channel)
     {
         this->split_->setChannel(channel);
     }
+    this->toggle_->setPlatform(platform);
+}
+
+void PovOverlayWindow::showAt(const QRect &panel, const multipov::Pov &pov)
+{
+    this->pov_ = pov;
+    this->updateChat();
     if (this->geometry() != panel)
     {
         this->setGeometry(panel);

@@ -425,6 +425,8 @@ set(SOURCE_FILES
         providers/liveupdates/BasicPubSubClient.hpp
         providers/liveupdates/BasicPubSubListener.hpp
         providers/liveupdates/BasicPubSubManager.hpp
+        providers/kick/KickChannel.cpp
+        providers/kick/KickChannel.hpp
 
         providers/pronouns/Pronouns.cpp
         providers/pronouns/Pronouns.hpp
@@ -805,6 +807,8 @@ set(SOURCE_FILES
         widgets/helper/ResizingTextEdit.hpp
         widgets/helper/ScalingSpacerItem.cpp
         widgets/helper/ScalingSpacerItem.hpp
+        widgets/helper/PlatformToggle.cpp
+        widgets/helper/PlatformToggle.hpp
         widgets/helper/ScrollbarHighlight.cpp
         widgets/helper/ScrollbarHighlight.hpp
         widgets/helper/SearchPopup.cpp

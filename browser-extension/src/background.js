@@ -375,6 +375,9 @@ chrome.runtime.onMessage.addListener((message, sender, callback) => {
         if (port) {
           port.postMessage({ action: 'multipov', povs: message.povs ?? [] });
         }
+        for (const pov of message.povs ?? []) {
+          announceKickChatroom(kickSlugFromPov(pov));
+        }
       });
       break;
     case 'overlay':
@@ -524,6 +527,80 @@ async function hideOverlay(reason) {
   postOverlay({ reason });
 }
 
+// Chatterino shows Kick's chat by connecting to its chatroom, which it can't
+// look up itself: kick.com only talks to browsers. So the extension looks up
+// the chatroom of every streamer shown and hands the id over.
+
+const KICK_RETRY_MS = 60_000;
+
+/**
+ * @type {Map<string, {
+ *   id: number | null | undefined,
+ *   lookup: Promise<void>,
+ *   announcedTo: object | null,
+ * }>}
+ */
+const kickChatrooms = new Map();
+
+/** The streamer who was last shown in the overlay */
+let overlayPov = null;
+
+/**
+ * kick.com/<slug> is the streamer's name with '_' written as '-'
+ * @param {string} pov "k-name", "t-name" or just "name"
+ */
+function kickSlugFromPov(pov) {
+  const name = pov.toLowerCase();
+  if (name.startsWith('k-')) return name.slice(2);
+  return (name.startsWith('t-') ? name.slice(2) : name).replaceAll('_', '-');
+}
+
+/** @param {string} slug */
+function kickEntry(slug) {
+  let entry = kickChatrooms.get(slug);
+  if (entry) return entry;
+
+  entry = { id: undefined, lookup: Promise.resolve(), announcedTo: null };
+  const created = entry;
+  created.lookup = fetch(
+    `https://kick.com/api/v2/channels/${encodeURIComponent(slug)}`,
+    { signal: AbortSignal.timeout(8000) },
+  )
+    .then(async response => {
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const id = (await response.json())?.chatroom?.id;
+      return typeof id === 'number' ? id : null;
+    })
+    .catch(e => {
+      console.warn(`Failed to look up the Kick chatroom of ${slug}`, e);
+      return null;
+    })
+    .then(id => {
+      created.id = id;
+      if (id === null) {
+        // Tried again the next time the streamer is shown
+        setTimeout(() => kickChatrooms.delete(slug), KICK_RETRY_MS);
+      }
+    });
+  kickChatrooms.set(slug, created);
+  return created;
+}
+
+/**
+ * Tells Chatterino the chatroom of a Kick channel, once per connection to it
+ * @param {string} slug
+ */
+async function announceKickChatroom(slug) {
+  const entry = kickEntry(slug);
+  await entry.lookup;
+
+  const port = getPort();
+  if (!port || entry.announcedTo === port) return;
+  entry.announcedTo = port;
+  port.postMessage({ action: 'kick-channel', slug, chatroomId: entry.id });
+}
+
 /**
  * @param {chrome.tabs.Tab} tab
  * @param {{ pov: string | null, reason?: string, rect?: DOMRectInit, viewport?: object }} message
@@ -558,6 +635,13 @@ async function updateOverlay(tab, message) {
   const left = v.screenX + (v.outerWidth - v.innerWidth * zoom) / 2;
 
   await chrome.storage.session.set({ overlayTabId: tab.id }).catch(() => {});
+  if (message.pov !== overlayPov) {
+    // Chatterino may have been restarted since, so it gets told again
+    overlayPov = message.pov;
+    const entry = kickChatrooms.get(kickSlugFromPov(message.pov));
+    if (entry) entry.announcedTo = null;
+  }
+  announceKickChatroom(kickSlugFromPov(message.pov));
   postOverlay({
     pov: message.pov,
     rect: {

@@ -4,15 +4,17 @@
 
 #pragma once
 
+#include "singletons/MultiPovSync.hpp"
+
 #include <QWidget>
 
 #include <memory>
+#include <optional>
 
 namespace chatterino {
 
+class PlatformToggle;
 class Split;
-class Channel;
-using ChannelPtr = std::shared_ptr<Channel>;
 
 /// A borderless window that sits on top of the browser's chat panel on
 /// lofi-nopixel.com and shows the selected POV's chat.
@@ -26,9 +28,9 @@ class PovOverlayWindow : public QWidget
 public:
     PovOverlayWindow();
 
-    /// Shows the window over `panel` (global, logical coordinates) with
-    /// `channel`, without taking focus from the browser.
-    void showAt(const QRect &panel, const ChannelPtr &channel);
+    /// Shows the window over `panel` (global, logical coordinates) with the
+    /// chat of `pov`, without taking focus from the browser.
+    void showAt(const QRect &panel, const multipov::Pov &pov);
 
     /// Hides the window, unless it's being used right now (the browser loses
     /// focus when the overlay is clicked).
@@ -47,7 +49,12 @@ private:
     /// Whether the overlay has keyboard focus, i.e. it's being used
     bool isFocused() const;
 
+    /// Shows the chat of pov_ on the platform that is chosen for it
+    void updateChat();
+
     Split *split_;
+    PlatformToggle *toggle_;
+    std::optional<multipov::Pov> pov_;
 
     /// macOS window number of the browser window the overlay was last shown
     /// over

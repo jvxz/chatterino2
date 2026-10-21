@@ -7,6 +7,7 @@
 #include "Application.hpp"
 #include "common/Channel.hpp"
 #include "debug/AssertInGuiThread.hpp"
+#include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/Paths.hpp"
 #include "singletons/Settings.hpp"
@@ -20,8 +21,11 @@
 #include "widgets/Window.hpp"
 
 #include <QFile>
+#include <QHash>
 #include <QJsonArray>
 #include <QPointer>
+
+#include <algorithm>
 
 namespace {
 
@@ -52,6 +56,32 @@ bool isValidTwitchLogin(QStringView login)
         }
     }
     return true;
+}
+
+/// Kick channel names are what is in their kick.com URL: letters, digits, '_'
+/// and '-'. Underscores are written as '-' there.
+bool isValidKickSlug(QStringView slug)
+{
+    if (slug.isEmpty() || slug.size() > 25)
+    {
+        return false;
+    }
+    for (auto c : slug)
+    {
+        if (!((c >= u'a' && c <= u'z') || (c >= u'0' && c <= u'9') ||
+              c == u'_' || c == u'-'))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The platforms picked for streamers with chatOf(), by Twitch login
+QHash<QString, multipov::Platform> &chosenPlatforms()
+{
+    static QHash<QString, multipov::Platform> chosen;
+    return chosen;
 }
 
 /// Finds the Multi-POV tab by its title, so the one restored from the window
@@ -100,46 +130,96 @@ SplitContainer *createContainer()
 
 namespace chatterino::multipov {
 
-std::optional<QString> twitchChannelFromPov(const QString &pov)
+std::optional<Pov> parsePov(const QString &pov)
 {
     auto name = pov.trimmed().toLower();
-    if (name.startsWith(u"t-") || name.startsWith(u"k-"))
+
+    auto platform = Platform::Twitch;
+    if (name.startsWith(u"t-"))
     {
         name.remove(0, 2);
+    }
+    else if (name.startsWith(u"k-"))
+    {
+        name.remove(0, 2);
+        platform = Platform::Kick;
+    }
+
+    if (platform == Platform::Kick)
+    {
+        if (!isValidKickSlug(name))
+        {
+            return std::nullopt;
+        }
+        auto login = name;
+        login.replace(u'-', u'_');
+        return Pov{.login = login, .kickSlug = name, .platform = platform};
     }
 
     if (!isValidTwitchLogin(name))
     {
         return std::nullopt;
     }
-    return name;
+    auto slug = name;
+    slug.replace(u'_', u'-');
+    return Pov{.login = name, .kickSlug = slug, .platform = platform};
 }
 
-QStringList twitchChannelsFromPovs(const QJsonArray &povs)
+std::vector<Pov> parsePovs(const QJsonArray &povs)
 {
-    QStringList channels;
-    channels.reserve(povs.size());
+    std::vector<Pov> parsed;
+    parsed.reserve(povs.size());
 
     for (const auto value : povs)
     {
-        auto name = twitchChannelFromPov(value.toString());
-        if (name && !channels.contains(*name))
+        auto pov = parsePov(value.toString());
+        if (!pov)
         {
-            channels.append(*name);
+            continue;
+        }
+        if (std::ranges::none_of(parsed, [&](const Pov &other) {
+                return other.login == pov->login;
+            }))
+        {
+            parsed.push_back(std::move(*pov));
         }
     }
 
-    return channels;
+    return parsed;
 }
 
-void syncSplits(const QStringList &channels)
+Platform chosenPlatform(const Pov &pov)
+{
+    return chosenPlatforms().value(pov.login, pov.platform);
+}
+
+void chooseChat(const Pov &pov, Platform platform)
+{
+    chosenPlatforms().insert(pov.login, platform);
+}
+
+ChannelPtr chatOf(const Pov &pov, Platform platform)
+{
+    if (platform == Platform::Kick)
+    {
+        return KickChannel::getOrAdd(pov.kickSlug);
+    }
+    return getApp()->getTwitch()->getOrAddChannel(pov.login);
+}
+
+void setKickChatroom(const QString &slug, std::optional<int64_t> chatroomId)
+{
+    KickChannel::setChatroom(slug, chatroomId);
+}
+
+void syncSplits(const std::vector<Pov> &povs)
 {
     assertInGuiThread();
 
     auto *container = findContainer();
     if (container == nullptr)
     {
-        if (channels.isEmpty())
+        if (povs.empty())
         {
             // Don't open an empty tab just because every chat is off
             return;
@@ -149,22 +229,30 @@ void syncSplits(const QStringList &channels)
 
     // Diff instead of rebuilding, so splits that stay keep their scroll
     // position and don't have to be laid out again.
-    QStringList missing = channels;
+    std::vector<ChannelPtr> missing;
+    missing.reserve(povs.size());
+    for (const auto &pov : povs)
+    {
+        missing.push_back(chatOf(pov, chosenPlatform(pov)));
+    }
+
     bool changed = false;
     for (auto *split : container->getSplits())
     {
-        if (missing.removeOne(split->getChannel()->getName().toLower()))
+        if (auto it = std::ranges::find(missing, split->getChannel());
+            it != missing.end())
         {
+            missing.erase(it);
             continue;
         }
         container->deleteSplit(split);
         changed = true;
     }
 
-    for (const auto &name : missing)
+    for (const auto &channel : missing)
     {
         auto *split = container->appendNewSplit(false);
-        split->setChannel(getApp()->getTwitch()->getOrAddChannel(name));
+        split->setChannel(channel);
         changed = true;
     }
 
@@ -177,7 +265,7 @@ void syncSplits(const QStringList &channels)
     }
 }
 
-void showOverlay(const QString &channel, const QRect &rect)
+void showOverlay(const Pov &pov, const QRect &rect)
 {
     assertInGuiThread();
 
@@ -200,7 +288,7 @@ void showOverlay(const QString &channel, const QRect &rect)
     {
         window = new PovOverlayWindow();
     }
-    window->showAt(rect, getApp()->getTwitch()->getOrAddChannel(channel));
+    window->showAt(rect, pov);
 }
 
 void hideOverlay()

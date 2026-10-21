@@ -77,6 +77,7 @@ private:
         void handleSync(const QJsonObject &root);
         void handleMultiPov(const QJsonObject &root);
         void handleOverlay(const QJsonObject &root);
+        void handleKickChannel(const QJsonObject &root);
 
         NativeMessagingServer &parent_;
     };
