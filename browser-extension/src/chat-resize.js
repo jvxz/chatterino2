@@ -1,6 +1,6 @@
 // A drag handle for resizing a site's chat column, shared by the content
 // scripts of sites that have no way to do it themselves (lofi-nopixel.com,
-// twitch.tv). Chatterino follows the chat's size, so it resizes along with the
+// gtaservers.org, twitch.tv). Chatterino follows the chat's size, so it resizes along with the
 // column. The handle sits just outside the column, since Chatterino covers the
 // column itself.
 globalThis.createChatResizer = ({ widthKey, onResize }) => {

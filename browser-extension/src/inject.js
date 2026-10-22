@@ -11,7 +11,7 @@
 
   // Outside of Windows, Chatterino can't attach to the browser window, so it
   // sits on top of the chat as an overlay, like on lofi-nopixel.com. The page
-  // reports where the chat is on screen, see lofi.js.
+  // reports where the chat is on screen, see multipov.js.
   let useOverlay = false;
   let lastOverlay = null;
 

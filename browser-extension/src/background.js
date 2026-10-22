@@ -153,7 +153,7 @@ function connectPort() {
 
   port.onMessage.addListener(msg => {
     if (typeof msg === 'object' && msg.type === 'theme') {
-      // Chatterino's chat background, for the lofi-nopixel content script
+      // Chatterino's chat background, for the Multi-POV content script
       if (/^#[0-9a-f]{6}$/i.test(msg.background)) {
         chrome.storage.local
           .set({ chatterinoBackground: msg.background })
@@ -488,7 +488,8 @@ chrome.tabs.onUpdated.addListener((id, changeInfo) => {
   }
 });
 
-// lofi-nopixel.com overlay: Chatterino sits on top of the chat on the page
+// Multi-POV overlay (lofi-nopixel.com, gtaservers.org): Chatterino sits on top
+// of the chat on the page
 
 /** @param {object} data */
 function postOverlay(data) {
@@ -530,7 +531,7 @@ async function hideOverlay(reason) {
  */
 async function updateOverlay(tab, message) {
   if (!message.pov || !tab.active) {
-    // Only the tab the overlay is over can hide it. Every lofi tab asks to
+    // Only the tab the overlay is over can hide it. Every Multi-POV tab asks to
     // hide it when it loads in the background, like when tabs are restored.
     const overlayTabId = await getOverlayTabId();
     if (overlayTabId === undefined || overlayTabId === tab.id) {
