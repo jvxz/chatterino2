@@ -22,7 +22,9 @@
       isMultiPov: () => location.pathname.startsWith('/nopixel'),
       povs: povsFromCaptions,
       findChat: findDrawnChat,
-      widthKey: 'gtaserversChatWidth',
+      // No widthKey: the site has its own handle (.np4-chat-grip) left of the
+      // chat column, outside what Chatterino covers. A width set from outside
+      // doesn't hold, as the site places the column itself.
     },
   };
   const site = sites[location.hostname.replace(/^www\./, '')];
@@ -177,12 +179,14 @@
     return pov ? { pov, el: chat, rect } : null;
   }
 
-  // The site has no way to resize its chat column, so a handle on its left edge
-  // does, see chat-resize.js.
-  const resizer = createChatResizer({
-    widthKey: site.widthKey,
-    onResize: () => update(),
-  });
+  // lofi-nopixel has no way to resize its chat column, so a handle on its left
+  // edge does, see chat-resize.js.
+  const resizer = site.widthKey
+    ? createChatResizer({
+        widthKey: site.widthKey,
+        onResize: () => update(),
+      })
+    : null;
 
   // When no chat is found, the page's frames go to its console, so a site
   // that changed its chat embed can be matched again
@@ -225,7 +229,7 @@
   function update(force = false) {
     const reason = hiddenReason();
     if (reason) {
-      resizer.follow(null);
+      resizer?.follow(null);
       hideOverlay(reason);
       return;
     }
@@ -241,7 +245,7 @@
       post({ type: 'multipov', povs });
     }
 
-    resizer.follow(shown?.el ?? null);
+    resizer?.follow(shown?.el ?? null);
     if (!shown) {
       hideOverlay('no chat on the page');
       return;
