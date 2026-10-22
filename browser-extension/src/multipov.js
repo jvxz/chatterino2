@@ -119,6 +119,25 @@
     return prefix + login.toLowerCase();
   }
 
+  // gtaservers.org draws its chat in the page, so there's no frame to unload.
+  // It's hidden instead while Chatterino covers it, which stops its layout,
+  // painting and animated emotes. Its chat sockets stay open: the site only
+  // closes them along with the chat column, which Chatterino sits over.
+  /** @type {HTMLElement | null} */
+  let hiddenChat = null;
+
+  function hideDrawnChat(chat) {
+    if (chat === hiddenChat) return;
+    showDrawnChat();
+    chat.style.setProperty('display', 'none', 'important');
+    hiddenChat = chat;
+  }
+
+  function showDrawnChat() {
+    hiddenChat?.style.removeProperty('display');
+    hiddenChat = null;
+  }
+
   function unloadChat(frame) {
     // color-scheme matches the site's, or Chrome paints the frame white
     const srcdoc = `<style>:root { color-scheme: dark; background: ${background}; }</style>`;
@@ -164,9 +183,16 @@
    * @returns {ShownChat | null}
    */
   function findDrawnChat() {
-    const chat = document.querySelector('[data-np4-chat] [data-np4-rchat]');
+    // The column also shows the site's Twatter and clips feeds
+    const column = document.querySelector(
+      '[data-np4-chat][data-np4-col="chat"]',
+    );
+    const chat = column?.querySelector('[data-np4-rchat]');
     if (!chat) return null;
-    const rect = chat.getBoundingClientRect();
+    // The chat has no box while it's hidden, the column's body around it does
+    const rect = column
+      .querySelector('[data-np4-chat-body]')
+      .getBoundingClientRect();
     if (!rect.width || !rect.height) return null;
 
     const platform = chat.classList.contains('np4-rchat--kick')
@@ -213,6 +239,7 @@
 
   /** @param {string} reason for Chatterino's logs */
   function hideOverlay(reason) {
+    showDrawnChat();
     if (lastOverlay === '') return;
     lastOverlay = '';
     post({ type: 'overlay', pov: null, reason });
@@ -271,6 +298,7 @@
       post(overlay);
     }
     if (shown.el instanceof HTMLIFrameElement) unloadChat(shown.el);
+    else hideDrawnChat(shown.el);
   }
 
   const timer = setInterval(update, POLL_MS);
