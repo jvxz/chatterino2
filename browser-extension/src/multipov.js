@@ -14,30 +14,22 @@
     'lofi-nopixel.com': {
       isMultiPov: () => location.pathname.startsWith('/multipov'),
       povs: povsFromPath,
+      findChat: findChatFrame,
       widthKey: 'lofiChatWidth',
     },
     'gtaservers.org': {
       // The NoPixel map and its Multi-POV viewer share one page
       isMultiPov: () => location.pathname.startsWith('/nopixel'),
-      povs: povsFromPlayers,
+      povs: povsFromCaptions,
+      findChat: findDrawnChat,
       widthKey: 'gtaserversChatWidth',
     },
   };
   const site = sites[location.hostname.replace(/^www\./, '')];
   if (!site) return;
 
-  // Chat embeds the sites show. Only the selected POV's chat is in the page.
+  // Chat embeds lofi-nopixel shows. Only the selected POV's chat is in the page.
   const chatFrameMatchers = [
-    // https://kick.com/<name>/chatroom, Kick's own embeddable chat
-    {
-      prefix: 'k-',
-      re: /^https:\/\/(?:www\.)?kick\.com\/([\w-]+)\/chatroom/,
-    },
-    // https://www.twitch.tv/popout/<name>/chat
-    {
-      prefix: 't-',
-      re: /^https:\/\/(?:www\.)?twitch\.tv\/popout\/(\w+)\/chat/,
-    },
     // https://chat.kick.cx/embed/<name>, what lofi-nopixel uses for Kick POVs
     { prefix: 'k-', re: /^https:\/\/chat\.kick\.cx\/embed\/([\w-]+)/ },
     // https://kick.com/popout/<name>/chat
@@ -49,7 +41,7 @@
     { prefix: 't-', re: /^https:\/\/(?:www\.)?twitch\.tv\/embed\/(\w+)\/chat/ },
   ];
 
-  // The site's own chat is unloaded while Chatterino covers it, so it stops
+  // lofi-nopixel's chat is unloaded while Chatterino covers it, so it stops
   // loading messages and emotes nobody sees. A srcdoc replaces the page in the
   // frame but leaves its src alone, so the chat can still be told apart. The
   // empty frame takes the background of Chatterino's chat, which Chatterino
@@ -71,17 +63,6 @@
   let lastOverlay = null;
   let lastPovs = null;
 
-  // Stream players, for sites whose URL doesn't name the open POVs
-  const playerFrameMatchers = [
-    // https://player.twitch.tv/?channel=<name>&parent=...
-    {
-      prefix: 't-',
-      re: /^https:\/\/player\.twitch\.tv\/\?(?:.*&)?channel=(\w+)/,
-    },
-    // https://player.kick.com/<name>
-    { prefix: 'k-', re: /^https:\/\/player\.kick\.com\/([\w-]+)/ },
-  ];
-
   /**
    * POVs open on the page, from the URL path: /multipov/k-anthonyz/t-xqc
    * @returns {string[]}
@@ -97,18 +78,43 @@
   }
 
   /**
-   * POVs open on the page, from its stream players. gtaservers.org keeps its
-   * selection in an encoded #v= hash, so the players are the only readable
-   * source.
+   * POVs open on gtaservers.org. It keeps its selection in an encoded #v= hash
+   * and plays Kick streams itself, so its players (.np4-frame) name no
+   * channel. Each player's caption links to the streamer's channels; the
+   * selected player has no caption, its links are in the strip below it.
    * @returns {string[]}
    */
-  function povsFromPlayers() {
+  function povsFromCaptions() {
+    const strip = document.querySelector('[data-np4-strip]');
     const povs = [];
-    for (const frame of document.getElementsByTagName('iframe')) {
-      const pov = matchFrame(frame, playerFrameMatchers);
+    for (const player of document.querySelectorAll('.np4-frame')) {
+      const caption = document.querySelector(
+        `[data-np4-cap="${CSS.escape(player.dataset.np4Frame ?? '')}"]`,
+      );
+      const pov = channelPov(caption ?? strip, player.dataset.platform);
       if (pov && !povs.includes(pov)) povs.push(pov);
     }
     return povs;
+  }
+
+  /**
+   * @param {Element | null} links holder of gtaservers.org's channel links:
+   *   <a data-np4-channel="kick" href="https://kick.com/<name>">
+   * @param {string | undefined} platform the link to prefer, "twitch" or "kick"
+   * @returns {string | null}
+   */
+  function channelPov(links, platform) {
+    const link =
+      links?.querySelector(
+        `a[data-np4-channel="${platform}"]:not([hidden])`,
+      ) ?? links?.querySelector('a[data-np4-channel]:not([hidden])');
+    // Twitch links point at the VOD instead while one is played back
+    const login = link?.href.match(
+      /^https:\/\/(?:www\.)?(?:twitch\.tv|kick\.com)\/(?!videos\/)([\w-]+)/,
+    )?.[1];
+    if (!login) return null;
+    const prefix = link.dataset.np4Channel === 'kick' ? 'k-' : 't-';
+    return prefix + login.toLowerCase();
   }
 
   function unloadChat(frame) {
@@ -117,9 +123,9 @@
     if (frame.srcdoc !== srcdoc) frame.srcdoc = srcdoc;
   }
 
-  function matchFrame(frame, matchers) {
+  function povFromFrame(frame) {
     const src = frame.src;
-    for (const { prefix, re } of matchers) {
+    for (const { prefix, re } of chatFrameMatchers) {
       const match = src.match(re);
       if (match) return prefix + match[1].toLowerCase();
     }
@@ -127,24 +133,48 @@
   }
 
   /**
-   * @returns {{ pov: string, frame: HTMLIFrameElement, rect: DOMRect } | null}
-   *   the largest visible chat embed
+   * @typedef {{ pov: string, el: HTMLElement, rect: DOMRect }} ShownChat
+   * @returns {ShownChat | null} the largest visible chat embed
    */
-  function findShownChat() {
+  function findChatFrame() {
     let shown = null;
     let shownArea = 0;
     for (const frame of document.getElementsByTagName('iframe')) {
-      const pov = matchFrame(frame, chatFrameMatchers);
+      const pov = povFromFrame(frame);
       if (!pov) continue;
 
       const rect = frame.getBoundingClientRect();
       const area = rect.width * rect.height;
       if (area > shownArea) {
-        shown = { pov, frame, rect };
+        shown = { pov, el: frame, rect };
         shownArea = area;
       }
     }
+    if (!shown) logFrames();
     return shown;
+  }
+
+  /**
+   * gtaservers.org draws the selected stream's chat itself, in the chat
+   * column (aside[data-np4-chat]), so there's no frame to read a channel from.
+   * The chat's class names its platform, merged Twitch and Kick chats count as
+   * Twitch, and the strip's link for that platform names the channel.
+   * @returns {ShownChat | null}
+   */
+  function findDrawnChat() {
+    const chat = document.querySelector('[data-np4-chat] [data-np4-rchat]');
+    if (!chat) return null;
+    const rect = chat.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+
+    const platform = chat.classList.contains('np4-rchat--kick')
+      ? 'kick'
+      : 'twitch';
+    const pov = channelPov(
+      document.querySelector('[data-np4-strip]'),
+      platform,
+    );
+    return pov ? { pov, el: chat, rect } : null;
   }
 
   // The site has no way to resize its chat column, so a handle on its left edge
@@ -201,7 +231,7 @@
     }
 
     const povs = site.povs();
-    const shown = findShownChat();
+    const shown = site.findChat();
 
     // Leaving the Multi-POV page doesn't clear the tab, so the last set of
     // chats stays open while browsing the rest of the site.
@@ -211,9 +241,8 @@
       post({ type: 'multipov', povs });
     }
 
-    resizer.follow(shown?.frame ?? null);
+    resizer.follow(shown?.el ?? null);
     if (!shown) {
-      logFrames();
       hideOverlay('no chat on the page');
       return;
     }
@@ -237,7 +266,7 @@
       lastOverlay = overlayKey;
       post(overlay);
     }
-    unloadChat(shown.frame);
+    if (shown.el instanceof HTMLIFrameElement) unloadChat(shown.el);
   }
 
   const timer = setInterval(update, POLL_MS);
