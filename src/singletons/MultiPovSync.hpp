@@ -17,6 +17,7 @@ class QRect;
 namespace chatterino {
 class Channel;
 class Paths;
+struct KickChatroom;
 using ChannelPtr = std::shared_ptr<Channel>;
 }  // namespace chatterino
 
@@ -59,10 +60,9 @@ void chooseChat(const Pov &pov, Platform platform);
 /// The chat of `pov` on `platform`: the Twitch channel, or the Kick chat.
 ChannelPtr chatOf(const Pov &pov, Platform platform);
 
-/// Tells Chatterino the Kick chatroom id of a streamer, found by the browser
-/// extension. Without an id, the streamer isn't on Kick. Must be called from
-/// the GUI thread.
-void setKickChatroom(const QString &slug, std::optional<int64_t> chatroomId);
+/// Tells Chatterino where the Kick chat of a streamer is, as the browser
+/// extension found out. Must be called from the GUI thread.
+void setKickChatroom(const QString &slug, const KickChatroom &chatroom);
 
 /// Makes the Multi-POV tab show exactly the chats of `povs`, one split each.
 /// Splits that are already showing a wanted chat are kept as they are.

@@ -9,6 +9,7 @@
 #include "common/Modes.hpp"
 #include "common/QLogging.hpp"
 #include "debug/AssertInGuiThread.hpp"
+#include "providers/kick/KickChannel.hpp"
 #include "providers/twitch/TwitchIrcServer.hpp"
 #include "singletons/MultiPovSync.hpp"
 #include "singletons/Paths.hpp"
@@ -642,23 +643,34 @@ void NativeMessagingServer::ReceiverThread::handleKickChannel(
     const QJsonObject &root)
 {
     // Structure:
-    // { action: 'kick-channel', slug: string, chatroomId?: number }
-    // The browser looked up the Kick chatroom of the channel at kick.com/slug.
-    // Without a chatroomId, there's no such channel.
+    // { action: 'kick-channel', slug: string, chatroomId?: number,
+    //   pusherKey?: string, pusherCluster?: string, error?: string }
+    // The browser looked up the Kick chat of the channel at kick.com/slug.
+    // Without a chatroomId, it couldn't be found, and error says why.
     const auto slug = root["slug"_L1].toString().toLower();
     if (slug.isEmpty())
     {
         return;
     }
 
-    std::optional<int64_t> chatroomId;
+    KickChatroom chatroom{
+        .id = std::nullopt,
+        .pusherKey = root["pusherKey"_L1].toString(),
+        .pusherCluster = root["pusherCluster"_L1].toString(),
+        .error = root["error"_L1].toString(),
+    };
     if (const auto value = root["chatroomId"_L1]; value.isDouble())
     {
-        chatroomId = static_cast<int64_t>(value.toDouble());
+        chatroom.id = static_cast<int64_t>(value.toDouble());
     }
 
-    postToThread([slug, chatroomId] {
-        multipov::setKickChatroom(slug, chatroomId);
+    qCDebug(chatterinoNativeMessage)
+        << "Kick chat of" << slug << "is chatroom" << chatroom.id.value_or(-1)
+        << "on Pusher app" << chatroom.pusherKey << chatroom.pusherCluster
+        << chatroom.error;
+
+    postToThread([slug, chatroom] {
+        multipov::setKickChatroom(slug, chatroom);
     });
 }
 

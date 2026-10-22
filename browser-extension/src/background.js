@@ -529,13 +529,24 @@ async function hideOverlay(reason) {
 
 // Chatterino shows Kick's chat by connecting to its chatroom, which it can't
 // look up itself: kick.com only talks to browsers. So the extension looks up
-// the chatroom of every streamer shown and hands the id over.
+// the chatroom of every streamer shown, and the Pusher app kick.com wants the
+// chat read from (it picks one per connection), and hands both over.
 
 const KICK_RETRY_MS = 60_000;
+const KICK_TIMEOUT_MS = 8000;
+
+/**
+ * @typedef {{
+ *   chatroomId?: number,
+ *   pusherKey?: string,
+ *   pusherCluster?: string,
+ *   error?: string,
+ * }} KickChatroom
+ */
 
 /**
  * @type {Map<string, {
- *   id: number | null | undefined,
+ *   chatroom: KickChatroom | undefined,
  *   lookup: Promise<void>,
  *   announcedTo: object | null,
  * }>}
@@ -555,30 +566,82 @@ function kickSlugFromPov(pov) {
   return (name.startsWith('t-') ? name.slice(2) : name).replaceAll('_', '-');
 }
 
+/**
+ * Asks kick.com which Pusher app to read a channel's chat from, like its own
+ * chat does
+ * @param {number} channelId
+ * @returns {Promise<{ pusherKey: string, pusherCluster: string }>}
+ */
+async function negotiateKickPusher(channelId) {
+  const response = await fetch(
+    `https://web.kick.com/api/v1/realtime/channels/${channelId}/chat/connection`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-platform': 'web' },
+      body: JSON.stringify({
+        client: { id: crypto.randomUUID(), type: 'web' },
+        // Chatterino only speaks Pusher
+        capabilities: { accepted_providers: [{ provider: 'pusher' }] },
+      }),
+      signal: AbortSignal.timeout(KICK_TIMEOUT_MS),
+    },
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const { data } = await response.json();
+  for (const connection of data?.connections ?? []) {
+    const { app_key: key, cluster } = connection?.credentials ?? {};
+    if (
+      connection?.provider === 'pusher' &&
+      /^[A-Za-z0-9]{1,128}$/.test(key) &&
+      /^[A-Za-z0-9]{1,32}$/.test(cluster)
+    ) {
+      return { pusherKey: key, pusherCluster: cluster };
+    }
+  }
+  throw new Error(`no Pusher connection offered: ${JSON.stringify(data)}`);
+}
+
+/**
+ * @param {string} slug
+ * @returns {Promise<KickChatroom>}
+ */
+async function lookupKickChatroom(slug) {
+  const response = await fetch(
+    `https://kick.com/api/v2/channels/${encodeURIComponent(slug)}`,
+    { signal: AbortSignal.timeout(KICK_TIMEOUT_MS) },
+  );
+  if (response.status === 404) return { error: 'no such channel' };
+  if (!response.ok) return { error: `kick.com answered ${response.status}` };
+
+  const channel = await response.json();
+  const chatroomId = channel?.chatroom?.id;
+  if (typeof chatroomId !== 'number') {
+    return { error: 'the channel has no chatroom' };
+  }
+
+  try {
+    return { chatroomId, ...(await negotiateKickPusher(channel.id)) };
+  } catch (e) {
+    // Chatterino falls back to the Pusher app kick.com used to use
+    console.warn(`Failed to negotiate the Kick chat connection of ${slug}`, e);
+    return { chatroomId };
+  }
+}
+
 /** @param {string} slug */
 function kickEntry(slug) {
   let entry = kickChatrooms.get(slug);
   if (entry) return entry;
 
-  entry = { id: undefined, lookup: Promise.resolve(), announcedTo: null };
+  entry = { chatroom: undefined, lookup: Promise.resolve(), announcedTo: null };
   const created = entry;
-  created.lookup = fetch(
-    `https://kick.com/api/v2/channels/${encodeURIComponent(slug)}`,
-    { signal: AbortSignal.timeout(8000) },
-  )
-    .then(async response => {
-      if (response.status === 404) return null;
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const id = (await response.json())?.chatroom?.id;
-      return typeof id === 'number' ? id : null;
-    })
-    .catch(e => {
-      console.warn(`Failed to look up the Kick chatroom of ${slug}`, e);
-      return null;
-    })
-    .then(id => {
-      created.id = id;
-      if (id === null) {
+  created.lookup = lookupKickChatroom(slug)
+    .catch(e => ({ error: String(e?.message ?? e) }))
+    .then(chatroom => {
+      console.log(`Kick chat of ${slug}:`, chatroom);
+      created.chatroom = chatroom;
+      if (chatroom.chatroomId === undefined || !chatroom.pusherKey) {
         // Tried again the next time the streamer is shown
         setTimeout(() => kickChatrooms.delete(slug), KICK_RETRY_MS);
       }
@@ -588,7 +651,7 @@ function kickEntry(slug) {
 }
 
 /**
- * Tells Chatterino the chatroom of a Kick channel, once per connection to it
+ * Tells Chatterino where a Kick chat is, once per connection to it
  * @param {string} slug
  */
 async function announceKickChatroom(slug) {
@@ -598,7 +661,7 @@ async function announceKickChatroom(slug) {
   const port = getPort();
   if (!port || entry.announcedTo === port) return;
   entry.announcedTo = port;
-  port.postMessage({ action: 'kick-channel', slug, chatroomId: entry.id });
+  port.postMessage({ action: 'kick-channel', slug, ...entry.chatroom });
 }
 
 /**

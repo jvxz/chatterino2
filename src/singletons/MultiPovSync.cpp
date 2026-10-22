@@ -207,9 +207,9 @@ ChannelPtr chatOf(const Pov &pov, Platform platform)
     return getApp()->getTwitch()->getOrAddChannel(pov.login);
 }
 
-void setKickChatroom(const QString &slug, std::optional<int64_t> chatroomId)
+void setKickChatroom(const QString &slug, const KickChatroom &chatroom)
 {
-    KickChannel::setChatroom(slug, chatroomId);
+    KickChannel::setChatroom(slug, chatroom);
 }
 
 void syncSplits(const std::vector<Pov> &povs)

@@ -22,6 +22,7 @@
 #include <QTimer>
 #include <QUrl>
 
+#include <algorithm>
 #include <iterator>
 
 namespace {
@@ -29,9 +30,32 @@ namespace {
 using namespace chatterino;
 using namespace Qt::StringLiterals;
 
-// The Pusher app kick.com's own chat connects with
-const QUrl SOCKET_URL(u"wss://ws-us2.pusher.com/app/eb1d5f283081a78b932c"
-                      u"?protocol=7&client=js&version=8.4.0&flash=false"_s);
+// The Pusher app kick.com's chat used before it started picking one per
+// connection. Only used if the extension couldn't find out the current one.
+const QString DEFAULT_PUSHER_KEY = u"32cbd69e4b950bf97679"_s;
+const QString DEFAULT_PUSHER_CLUSTER = u"us2"_s;
+
+bool isAsciiAlnum(QStringView text, qsizetype maxSize)
+{
+    if (text.isEmpty() || text.size() > maxSize)
+    {
+        return false;
+    }
+    return std::ranges::all_of(text, [](QChar c) {
+        return (c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z') ||
+               (c >= u'0' && c <= u'9');
+    });
+}
+
+QUrl socketUrl(const KickChatroom &chatroom)
+{
+    const bool valid = isAsciiAlnum(chatroom.pusherKey, 128) &&
+                       isAsciiAlnum(chatroom.pusherCluster, 32);
+    return QUrl(u"wss://ws-%1.pusher.com/app/%2"
+                u"?protocol=7&client=js&version=8.4.0&flash=false"_s.arg(
+                    valid ? chatroom.pusherCluster : DEFAULT_PUSHER_CLUSTER,
+                    valid ? chatroom.pusherKey : DEFAULT_PUSHER_KEY));
+}
 
 // Chats nothing shows anymore are dropped once there are more than this
 constexpr size_t MAX_UNUSED_CHATS = 8;
@@ -53,9 +77,8 @@ WebSocketPool &socketPool()
 
 struct Registry {
     QHash<QString, std::shared_ptr<KickChannel>> channels;
-    // Chatroom ids the extension sent before the chat was opened. A missing
-    // value means the channel doesn't exist.
-    QHash<QString, std::optional<int64_t>> chatrooms;
+    // Chatrooms the extension sent, also from before the chat was opened
+    QHash<QString, KickChatroom> chatrooms;
 };
 
 Registry &registry()
@@ -192,26 +215,39 @@ std::shared_ptr<KickChannel> KickChannel::getOrAdd(const QString &slug)
     reg.channels.insert(slug, channel);
     if (auto known = reg.chatrooms.find(slug); known != reg.chatrooms.end())
     {
-        channel->setChatroomId(*known);
+        channel->setChatroom(*known);
     }
     else
     {
         channel->addSystemMessage(
             u"Looking up the Kick chat of %1..."_s.arg(channel->slug_));
+
+        // The extension answers within seconds, unless it's an old version
+        QTimer::singleShot(
+            std::chrono::seconds(15),
+            [weak = std::weak_ptr<KickChannel>(channel)] {
+                auto strong = weak.lock();
+                if (strong && !strong->chatroomKnown_)
+                {
+                    strong->addSystemMessage(
+                        u"The browser extension hasn't looked up this Kick "
+                        u"chat. Reload the extension on the browser's "
+                        u"Extensions page, then reload the page."_s);
+                }
+            });
     }
     return channel;
 }
 
-void KickChannel::setChatroom(const QString &slug,
-                              std::optional<int64_t> chatroomId)
+void KickChannel::setChatroom(const QString &slug, const KickChatroom &chatroom)
 {
     assertInGuiThread();
 
     auto &reg = registry();
-    reg.chatrooms.insert(slug, chatroomId);
+    reg.chatrooms.insert(slug, chatroom);
     if (auto it = reg.channels.find(slug); it != reg.channels.end())
     {
-        (*it)->setChatroomId(chatroomId);
+        (*it)->setChatroom(chatroom);
     }
 }
 
@@ -240,39 +276,53 @@ void KickChannel::sendMessage(const QString & /*message*/)
     this->addSystemMessage(u"Kick chat is read-only."_s);
 }
 
-void KickChannel::setChatroomId(std::optional<int64_t> chatroomId)
+void KickChannel::setChatroom(const KickChatroom &chatroom)
 {
-    if (!chatroomId)
+    // The extension sends it again whenever the shown streamer changes
+    if (this->chatroomKnown_ && this->chatroom_.id == chatroom.id &&
+        this->chatroom_.pusherKey == chatroom.pusherKey &&
+        this->chatroom_.pusherCluster == chatroom.pusherCluster &&
+        (chatroom.id || this->chatroom_.error == chatroom.error))
     {
-        this->chatroomId_.reset();
+        return;
+    }
+    this->chatroom_ = chatroom;
+    this->chatroomKnown_ = true;
+    this->failureShown_ = false;
+
+    if (!chatroom.id)
+    {
         this->socket_ = {};
         this->generation_++;
         this->addSystemMessage(
-            u"Couldn't find the Kick chat of %1."_s.arg(this->slug_));
+            chatroom.error.isEmpty()
+                ? u"Couldn't find the Kick chat of %1."_s.arg(this->slug_)
+                : u"Couldn't find the Kick chat of %1: %2"_s.arg(
+                      this->slug_, chatroom.error));
         return;
     }
 
-    if (this->chatroomId_ == chatroomId)
-    {
-        // The extension sends it again whenever the overlay moves
-        return;
-    }
-    this->chatroomId_ = chatroomId;
+    this->addSystemMessage(
+        u"Connecting to the Kick chat of %1..."_s.arg(this->slug_));
     this->connect();
 }
 
 void KickChannel::connect()
 {
-    if (!this->chatroomId_)
+    if (!this->chatroom_.id)
     {
         return;
     }
+
+    const auto url = socketUrl(this->chatroom_);
+    qCDebug(chatterinoNativeMessage) << "Connecting to Kick chat" << this->slug_
+                                     << *this->chatroom_.id << url;
 
     this->subscribed_ = false;
     // Replacing the handle closes the old connection, whose events are
     // ignored from now on
     this->socket_ = socketPool().createSocket(
-        {.url = SOCKET_URL, .headers = {}},
+        {.url = url, .headers = {}},
         std::make_unique<Listener>(
             std::static_pointer_cast<KickChannel>(this->shared_from_this()),
             ++this->generation_));
@@ -287,7 +337,7 @@ void KickChannel::onSocketEvent(uint64_t generation, const QString &event,
                                 const QString &data)
 {
     assertInGuiThread();
-    if (generation != this->generation_ || !this->chatroomId_)
+    if (generation != this->generation_ || !this->chatroom_.id)
     {
         return;
     }
@@ -299,7 +349,7 @@ void KickChannel::onSocketEvent(uint64_t generation, const QString &event,
             {"data"_L1,
              QJsonObject{
                  {"auth"_L1, ""_L1},
-                 {"channel"_L1, u"chatrooms.%1.v2"_s.arg(*this->chatroomId_)},
+                 {"channel"_L1, u"chatrooms.%1.v2"_s.arg(*this->chatroom_.id)},
              }},
         };
         this->send(QJsonDocument(subscription).toJson(QJsonDocument::Compact));
@@ -312,12 +362,22 @@ void KickChannel::onSocketEvent(uint64_t generation, const QString &event,
     {
         this->backoff_.reset();
         this->subscribed_ = true;
+        this->failureShown_ = false;
         this->addSystemMessage(
             u"Connected to the Kick chat of %1."_s.arg(this->slug_));
     }
     else if (event == u"pusher:error")
     {
         qCWarning(chatterinoNativeMessage) << "Kick chat error:" << data;
+        if (!this->failureShown_)
+        {
+            this->failureShown_ = true;
+            const auto error = QJsonDocument::fromJson(data.toUtf8()).object();
+            this->addSystemMessage(
+                u"The Kick chat refused the connection: %1 (%2)"_s.arg(
+                    error["message"_L1].toString(),
+                    QString::number(error["code"_L1].toInt())));
+        }
     }
     else if (event == u"App\\Events\\ChatMessageEvent")
     {
@@ -350,6 +410,12 @@ void KickChannel::onSocketClosed(uint64_t generation)
         this->subscribed_ = false;
         this->addSystemMessage(u"Disconnected from the Kick chat. "
                                u"Reconnecting..."_s);
+    }
+    else if (!this->failureShown_)
+    {
+        this->failureShown_ = true;
+        this->addSystemMessage(u"Couldn't connect to the Kick chat. "
+                               u"Retrying..."_s);
     }
 
     QTimer::singleShot(
