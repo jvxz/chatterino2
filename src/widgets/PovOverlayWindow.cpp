@@ -6,6 +6,7 @@
 
 #include "common/Channel.hpp"
 #include "common/QLogging.hpp"
+#include "widgets/helper/PlatformToggle.hpp"
 #include "widgets/splits/Split.hpp"
 
 #ifdef Q_OS_MACOS
@@ -24,7 +25,16 @@ PovOverlayWindow::PovOverlayWindow()
     : QWidget(nullptr,
               Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
     , split_(new Split(this))
+    , toggle_(new PlatformToggle(this))
 {
+    this->toggle_->platformPicked.connect([this](multipov::Platform platform) {
+        if (this->pov_)
+        {
+            multipov::chooseChat(*this->pov_, platform);
+            this->updateChat();
+        }
+    });
+
     // Tool windows are hidden while Chatterino isn't the active app, which is
     // always the case while the browser is focused.
     this->setAttribute(Qt::WA_MacAlwaysShowToolWindow);
@@ -49,12 +59,21 @@ PovOverlayWindow::PovOverlayWindow()
 #endif
 }
 
-void PovOverlayWindow::showAt(const QRect &panel, const ChannelPtr &channel)
+void PovOverlayWindow::updateChat()
 {
+    const auto platform = multipov::chosenPlatform(*this->pov_);
+    auto channel = multipov::chatOf(*this->pov_, platform);
     if (this->split_->getChannel() != channel)
     {
         this->split_->setChannel(channel);
     }
+    this->toggle_->setPlatform(platform);
+}
+
+void PovOverlayWindow::showAt(const QRect &panel, const multipov::Pov &pov)
+{
+    this->pov_ = pov;
+    this->updateChat();
     if (this->geometry() != panel)
     {
         this->setGeometry(panel);
@@ -132,7 +151,10 @@ void PovOverlayWindow::resizeEvent(QResizeEvent *event)
 {
     // Placed by hand rather than with a layout: a layout would make the split's
     // minimum size the window's, which is wider than the site's chat.
-    this->split_->setGeometry(this->rect());
+    // The platform tabs sit on top, like a window's tabs above its splits.
+    const auto tabsHeight = this->toggle_->preferredHeight();
+    this->toggle_->setGeometry(0, 0, this->width(), tabsHeight);
+    this->split_->setGeometry(this->rect().adjusted(0, tabsHeight, 0, 0));
     QWidget::resizeEvent(event);
 }
 

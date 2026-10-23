@@ -10,7 +10,7 @@
 
 using namespace chatterino;
 
-TEST(MultiPovSync, twitchChannelsFromPovs)
+TEST(MultiPovSync, parsePovs)
 {
     struct TestCase {
         QJsonArray input;
@@ -19,7 +19,7 @@ TEST(MultiPovSync, twitchChannelsFromPovs)
 
     std::vector<TestCase> tests{
         {{}, {}},
-        // Twitch and Kick slugs both map to the Twitch name
+        // Twitch and Kick slugs both give the streamer's Twitch login
         {{"t-xqc", "k-buddha"}, {"xqc", "buddha"}},
         // plain channel names are accepted as-is
         {{"anthonyz"}, {"anthonyz"}},
@@ -27,8 +27,10 @@ TEST(MultiPovSync, twitchChannelsFromPovs)
         {{"k-xqc", "t-xqc", "t-pengwin"}, {"xqc", "pengwin"}},
         // case and whitespace are normalized
         {{" T-XQC ", "k-Buddha"}, {"xqc", "buddha"}},
-        // names that can't be Twitch logins are skipped
-        {{"k-", "t-a-b", "k-way_too_long_for_twitch_login", "k-zaitohro"},
+        // Kick writes '_' as '-'
+        {{"k-hello-kiko", "t-hello_kiko"}, {"hello_kiko"}},
+        // names that can't be Twitch logins or Kick slugs are skipped
+        {{"k-", "t-a-b", "k-way_too_long_for_a_kick_channel", "k-zaitohro"},
          {"zaitohro"}},
         // non-strings are skipped
         {{1, QJsonValue::Null, "t-omie"}, {"omie"}},
@@ -36,16 +38,35 @@ TEST(MultiPovSync, twitchChannelsFromPovs)
 
     for (const auto &[input, expected] : tests)
     {
-        ASSERT_EQ(multipov::twitchChannelsFromPovs(input), expected);
+        QStringList logins;
+        for (const auto &pov : multipov::parsePovs(input))
+        {
+            logins.append(pov.login);
+        }
+        ASSERT_EQ(logins, expected);
     }
 }
 
-TEST(MultiPovSync, twitchChannelFromPov)
+TEST(MultiPovSync, parsePov)
 {
-    ASSERT_EQ(multipov::twitchChannelFromPov("k-AnthonyZ").value_or(""),
-              QString("anthonyz"));
-    ASSERT_EQ(multipov::twitchChannelFromPov("t-xqc").value_or(""),
-              QString("xqc"));
-    ASSERT_FALSE(multipov::twitchChannelFromPov("").has_value());
-    ASSERT_FALSE(multipov::twitchChannelFromPov("k-not-twitch").has_value());
+    const auto kick = multipov::parsePov("k-Hello-Kiko");
+    ASSERT_TRUE(kick.has_value());
+    ASSERT_EQ(kick->login, QString("hello_kiko"));
+    ASSERT_EQ(kick->kickSlug, QString("hello-kiko"));
+    ASSERT_EQ(kick->platform, multipov::Platform::Kick);
+
+    const auto twitch = multipov::parsePov("t-hello_kiko");
+    ASSERT_TRUE(twitch.has_value());
+    ASSERT_EQ(twitch->login, QString("hello_kiko"));
+    ASSERT_EQ(twitch->kickSlug, QString("hello-kiko"));
+    ASSERT_EQ(twitch->platform, multipov::Platform::Twitch);
+
+    const auto plain = multipov::parsePov("xqc");
+    ASSERT_TRUE(plain.has_value());
+    ASSERT_EQ(plain->platform, multipov::Platform::Twitch);
+
+    ASSERT_FALSE(multipov::parsePov("").has_value());
+    // '-' is not allowed in Twitch logins
+    ASSERT_FALSE(multipov::parsePov("t-not-twitch").has_value());
+    ASSERT_FALSE(multipov::parsePov("xqc!").has_value());
 }

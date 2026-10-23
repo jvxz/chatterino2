@@ -4,7 +4,7 @@
 // so Chatterino can sit on top of it ("overlay"), plus which POVs the page
 // has open ("multipov", for the optional Multi-POV tab). POVs are reported
 // as the site's own slugs ("t-xqc" for Twitch, "k-xqc" for Kick); Chatterino
-// maps both to the Twitch channel of the same name.
+// shows the chat of the platform they're on, and lets you switch.
 (() => {
   // How often the chat's position is checked. Moving or resizing the browser
   // window doesn't fire any event inside the page, so this has to poll.
