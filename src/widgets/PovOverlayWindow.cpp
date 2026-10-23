@@ -6,7 +6,6 @@
 
 #include "common/Channel.hpp"
 #include "common/QLogging.hpp"
-#include "widgets/helper/ChannelView.hpp"
 #include "widgets/helper/PlatformToggle.hpp"
 #include "widgets/splits/Split.hpp"
 
@@ -26,7 +25,7 @@ PovOverlayWindow::PovOverlayWindow()
     : QWidget(nullptr,
               Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
     , split_(new Split(this))
-    , toggle_(new PlatformToggle(&this->split_->getChannelView()))
+    , toggle_(new PlatformToggle(this))
 {
     this->toggle_->platformPicked.connect([this](multipov::Platform platform) {
         if (this->pov_)
@@ -152,7 +151,10 @@ void PovOverlayWindow::resizeEvent(QResizeEvent *event)
 {
     // Placed by hand rather than with a layout: a layout would make the split's
     // minimum size the window's, which is wider than the site's chat.
-    this->split_->setGeometry(this->rect());
+    // The platform tabs sit on top, like a window's tabs above its splits.
+    const auto tabsHeight = this->toggle_->preferredHeight();
+    this->toggle_->setGeometry(0, 0, this->width(), tabsHeight);
+    this->split_->setGeometry(this->rect().adjusted(0, tabsHeight, 0, 0));
     QWidget::resizeEvent(event);
 }
 

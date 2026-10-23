@@ -9,10 +9,12 @@
 
 #include <pajlada/signals/signal.hpp>
 
+#include <array>
+
 namespace chatterino {
 
-/// A small "Twitch | Kick" switch in the top right corner of its parent, to
-/// pick which platform's chat to show.
+/// A row of "Twitch" and "Kick" tabs, drawn like the tabs of a window's
+/// notebook, to pick which platform's chat to show.
 class PlatformToggle : public BaseWidget
 {
 public:
@@ -20,22 +22,32 @@ public:
 
     void setPlatform(multipov::Platform platform);
 
+    /// The height the row needs at the current scale
+    int preferredHeight() const;
+
     /// The user picked a platform that wasn't selected
     pajlada::Signals::Signal<multipov::Platform> platformPicked;
 
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
-    bool eventFilter(QObject *watched, QEvent *event) override;
-    void scaleChangedEvent(float scale) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void leaveEvent(QEvent *event) override;
 
 private:
-    /// Resizes to fit the labels and moves to the parent's corner
-    void updateGeometry_();
+    struct Tab {
+        multipov::Platform platform;
+        QString title;
+    };
+    static const std::array<Tab, 2> TABS;
 
-    QFont font_() const;
+    /// Where each tab is, in TABS order
+    std::array<QRect, 2> tabRects() const;
+    /// The tab under `pos`, or -1
+    int tabAt(QPoint pos) const;
 
     multipov::Platform platform_ = multipov::Platform::Twitch;
+    int hovered_ = -1;
 };
 
 }  // namespace chatterino

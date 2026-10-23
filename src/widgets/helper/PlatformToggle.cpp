@@ -7,30 +7,35 @@
 #include "Application.hpp"
 #include "singletons/Fonts.hpp"
 #include "singletons/Theme.hpp"
+#include "widgets/helper/NotebookTab.hpp"
 
-#include <QEvent>
-#include <QFontMetrics>
+#include <QApplication>
 #include <QMouseEvent>
 #include <QPainter>
 
+#include <cmath>
+
 namespace {
 
-constexpr int SIDE_MARGIN = 22;  // clears the scrollbar
-constexpr int TOP_MARGIN = 6;
-constexpr int PADDING_X = 9;
-constexpr int PADDING_Y = 4;
+// Same as the space around a tab's title in the notebook, without a close
+// button
+constexpr int TAB_PADDING = 8;
+// Same as the line under the notebook's tabs
+constexpr int DIVIDER_HEIGHT = 2;
 
 }  // namespace
 
 namespace chatterino {
 
+const std::array<PlatformToggle::Tab, 2> PlatformToggle::TABS{{
+    {.platform = multipov::Platform::Twitch, .title = QStringLiteral("Twitch")},
+    {.platform = multipov::Platform::Kick, .title = QStringLiteral("Kick")},
+}};
+
 PlatformToggle::PlatformToggle(QWidget *parent)
     : BaseWidget(parent)
 {
-    this->setCursor(Qt::PointingHandCursor);
-    this->setToolTip(QStringLiteral("Switch between the Twitch and Kick chat"));
-    parent->installEventFilter(this);
-    this->updateGeometry_();
+    this->setMouseTracking(true);
 }
 
 void PlatformToggle::setPlatform(multipov::Platform platform)
@@ -42,62 +47,87 @@ void PlatformToggle::setPlatform(multipov::Platform platform)
     }
 }
 
-QFont PlatformToggle::font_() const
+int PlatformToggle::preferredHeight() const
 {
-    return getApp()->getFonts()->getFont(FontStyle::UiMediumBold,
-                                         this->scale());
+    return static_cast<int>((NOTEBOOK_TAB_HEIGHT + DIVIDER_HEIGHT) *
+                            this->scale());
 }
 
-void PlatformToggle::updateGeometry_()
+std::array<QRect, 2> PlatformToggle::tabRects() const
 {
-    const QFontMetrics metrics(this->font_());
     const auto scale = this->scale();
-    // Both halves are as wide as the longer label
-    const auto half = metrics.horizontalAdvance(QStringLiteral("Twitch")) +
-                      static_cast<int>(2 * PADDING_X * scale);
-    const auto height =
-        metrics.height() + static_cast<int>(2 * PADDING_Y * scale);
-    this->resize(2 * half, height);
+    const auto metrics =
+        getApp()->getFonts()->getFontMetrics(FontStyle::UiTabs, scale);
+    const auto height = static_cast<int>(NOTEBOOK_TAB_HEIGHT * scale);
 
-    if (auto *parent = this->parentWidget())
+    std::array<QRect, 2> rects;
+    int x = 0;
+    for (size_t i = 0; i < TABS.size(); i++)
     {
-        this->move(parent->width() - this->width() -
-                       static_cast<int>(SIDE_MARGIN * scale),
-                   static_cast<int>(TOP_MARGIN * scale));
-        this->raise();
+        const auto width = metrics.horizontalAdvance(TABS[i].title) +
+                           static_cast<int>(2 * TAB_PADDING * scale);
+        rects[i] = QRect(x, 0, width, height);
+        x += width;
     }
+    return rects;
+}
+
+int PlatformToggle::tabAt(QPoint pos) const
+{
+    const auto rects = this->tabRects();
+    for (size_t i = 0; i < rects.size(); i++)
+    {
+        if (rects[i].contains(pos))
+        {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
 }
 
 void PlatformToggle::paintEvent(QPaintEvent * /*event*/)
 {
+    // Painted like NotebookTab and Notebook do with their tabs at the top
     QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
+    const auto scale = this->scale();
+    const auto &tabs = this->theme->tabs;
 
-    const auto outer = QRectF(this->rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-    const auto radius = outer.height() / 2;
+    painter.fillRect(this->rect(), this->theme->window.background);
 
-    auto background = this->theme->splits.header.background;
-    background.setAlpha(225);
-    painter.setPen(this->theme->splits.header.border);
-    painter.setBrush(background);
-    painter.drawRoundedRect(outer, radius, radius);
+    const auto windowFocused = this->window() == QApplication::activeWindow();
+    painter.setFont(getApp()->getFonts()->getFont(FontStyle::UiTabs, scale));
 
-    const auto halfWidth = outer.width() / 2;
-    const QRectF left(outer.left(), outer.top(), halfWidth, outer.height());
-    const QRectF right(outer.left() + halfWidth, outer.top(), halfWidth,
-                       outer.height());
+    const auto rects = this->tabRects();
+    for (size_t i = 0; i < TABS.size(); i++)
+    {
+        const auto selected = TABS[i].platform == this->platform_;
+        const auto &colors = selected ? tabs.selected : tabs.regular;
 
-    const auto selected =
-        this->platform_ == multipov::Platform::Twitch ? left : right;
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(this->theme->accent);
-    painter.drawRoundedRect(selected.adjusted(2, 2, -2, -2), radius - 2,
-                            radius - 2);
+        // Unselected tabs sit a pixel lower
+        auto background = rects[i];
+        background.setTop(
+            static_cast<int>(std::ceil((selected ? 0 : 1) * scale)));
+        painter.fillRect(background, windowFocused
+                                         ? colors.backgrounds.regular
+                                         : colors.backgrounds.unfocused);
 
-    painter.setFont(this->font_());
-    painter.setPen(this->theme->splits.header.text);
-    painter.drawText(left, Qt::AlignCenter, QStringLiteral("Twitch"));
-    painter.drawText(right, Qt::AlignCenter, QStringLiteral("Kick"));
+        const auto lineThickness =
+            static_cast<int>(std::ceil((selected ? 2 : 1) * scale));
+        const auto lineColor =
+            this->hovered_ == static_cast<int>(i)
+                ? colors.line.hover
+                : (windowFocused ? colors.line.regular : colors.line.unfocused);
+        painter.fillRect(background.left(), background.top(),
+                         background.width(), lineThickness, lineColor);
+
+        painter.setPen(colors.text);
+        painter.drawText(background, Qt::AlignCenter, TABS[i].title);
+    }
+
+    // The line under the tabs, where the chat starts
+    const auto dividerHeight = static_cast<int>(DIVIDER_HEIGHT * scale);
+    painter.fillRect(0, this->height() - dividerHeight, this->width(),
+                     dividerHeight, tabs.dividerLine);
 }
 
 void PlatformToggle::mousePressEvent(QMouseEvent *event)
@@ -107,27 +137,35 @@ void PlatformToggle::mousePressEvent(QMouseEvent *event)
         return;
     }
 
-    const auto picked = event->position().x() < this->width() / 2.0
-                            ? multipov::Platform::Twitch
-                            : multipov::Platform::Kick;
-    if (picked != this->platform_)
+    const auto index = this->tabAt(event->position().toPoint());
+    if (index < 0)
     {
-        this->platformPicked.invoke(picked);
+        return;
+    }
+    const auto platform = TABS[static_cast<size_t>(index)].platform;
+    if (platform != this->platform_)
+    {
+        this->platformPicked.invoke(platform);
     }
 }
 
-bool PlatformToggle::eventFilter(QObject *watched, QEvent *event)
+void PlatformToggle::mouseMoveEvent(QMouseEvent *event)
 {
-    if (watched == this->parentWidget() && event->type() == QEvent::Resize)
+    const auto hovered = this->tabAt(event->position().toPoint());
+    if (hovered != this->hovered_)
     {
-        this->updateGeometry_();
+        this->hovered_ = hovered;
+        this->update();
     }
-    return BaseWidget::eventFilter(watched, event);
 }
 
-void PlatformToggle::scaleChangedEvent(float /*scale*/)
+void PlatformToggle::leaveEvent(QEvent * /*event*/)
 {
-    this->updateGeometry_();
+    if (this->hovered_ != -1)
+    {
+        this->hovered_ = -1;
+        this->update();
+    }
 }
 
 }  // namespace chatterino
