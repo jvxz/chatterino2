@@ -31,8 +31,12 @@
     },
     {
       "run_at": "document_idle",
-      "matches": ["https://lofi-nopixel.com/*"],
-      "js": ["chat-resize.js", "lofi.js"]
+      "matches": [
+        "https://lofi-nopixel.com/*",
+        "https://gtaservers.org/*",
+        "https://www.gtaservers.org/*"
+      ],
+      "js": ["chat-resize.js", "multipov.js"]
     }
   ]
 }

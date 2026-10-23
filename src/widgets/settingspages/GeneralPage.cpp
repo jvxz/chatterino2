@@ -1019,11 +1019,12 @@ void GeneralPage::initLayout(GeneralPageView &layout)
             ->addTo(layout, form);
     }
 
-    layout.addSubtitle("lofi-nopixel Multi-POV");
+    layout.addSubtitle("Multi-POV sites");
     layout.addDescription(
-        "Shows the chat selected on lofi-nopixel.com's Multi-POV page in "
-        "Chatterino. Kick POVs show the Twitch chat with the same name.");
-    SettingWidget::checkbox("Replace the lofi-nopixel chat with Chatterino",
+        "Shows the chat selected on lofi-nopixel.com's Multi-POV page or "
+        "gtaservers.org's NoPixel map in Chatterino. Kick POVs show the "
+        "Twitch chat with the same name.");
+    SettingWidget::checkbox("Replace the site's chat with Chatterino",
                             s.povOverlayEnabled)
         ->setTooltip("Places Chatterino over the chat panel on the page while "
                      "the browser is in front.")
